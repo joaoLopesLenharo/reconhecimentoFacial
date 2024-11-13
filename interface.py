@@ -1,12 +1,13 @@
-# interface.py
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QPushButton, QLineEdit, QHBoxLayout
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QScrollArea, QVBoxLayout, QPushButton, QLineEdit, QHBoxLayout
 from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QImage, QPixmap
 from camera import Camera
 from groq_api import GroQAPI
 from database import Database
 import cv2
+
 alunosPresentes = []
+
 class ControlePresencaWindow(QWidget):
     def __init__(self, db):
         super().__init__()
@@ -33,13 +34,10 @@ class ControlePresencaWindow(QWidget):
         
         self.setLayout(layout)
 
-
-
     def update_frame(self):
         """Captura o quadro da câmera, realiza reconhecimento facial e exibe na interface."""
         frame = self.camera.capture()
 
-        
         if frame is not None:
             # Converte a imagem de BGR (OpenCV) para RGB (Qt)
             rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -74,8 +72,6 @@ class ControlePresencaWindow(QWidget):
             qt_image = QImage(rgb_image.data, rgb_image.shape[1], rgb_image.shape[0], QImage.Format_RGB888)
             self.camera_label.setPixmap(QPixmap.fromImage(qt_image))
 
-
-
 class MainWindow(QWidget):
     def __init__(self, db):
         super().__init__()
@@ -103,8 +99,6 @@ class MainWindow(QWidget):
         self.presenca_button.clicked.connect(self.open_controle_presenca)
         self.list_aluno_button.clicked.connect(self.show_aluno_list)
 
-    
-        
         layout.addWidget(self.label)
         layout.addWidget(self.name_input)
         layout.addWidget(self.capture_button)
@@ -117,6 +111,7 @@ class MainWindow(QWidget):
     def show_aluno_list(self):
         self.aluno_list_window = AlunoListWindow(self.db)
         self.aluno_list_window.show()
+
     def capture_photo(self):
         """Captura a imagem da câmera."""
         self.captured_photo = self.camera.capture()
@@ -153,12 +148,21 @@ class AlunoListWindow(QWidget):
 
     def init_ui(self):
         self.setWindowTitle("Alunos Cadastrados")
-        layout = QVBoxLayout()
-
+        self.setFixedSize(800, 600)  # Define o tamanho fixo da janela
+        
+        # Criação da área de rolagem
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        
+        # Widget que conterá o layout interno
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
+        
         alunos = self.db.get_all_alunos()
         for aluno in alunos:
             name_label = QLabel(f"Nome: {aluno['nome']}")
             desc_label = QLabel(f"Descrição: {aluno['descricao']}")
+            desc_label.setWordWrap(True)  # Permite quebra de linha automática
             image_label = QLabel()
             image = QImage.fromData(aluno['foto'])
             image_label.setPixmap(QPixmap.fromImage(image))
@@ -166,6 +170,11 @@ class AlunoListWindow(QWidget):
             layout.addWidget(name_label)
             layout.addWidget(desc_label)
             layout.addWidget(image_label)
-
-        self.setLayout(layout)
-
+        
+        # Adiciona o widget de conteúdo na área de rolagem
+        scroll_area.setWidget(content_widget)
+        
+        # Layout principal da janela
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(scroll_area)
+        self.setLayout(main_layout)
