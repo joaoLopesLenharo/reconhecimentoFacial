@@ -19,7 +19,9 @@ class GroQAPI:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Descreva a aparência física observada da pessoa..."},
+                        {"type": "text", "text": """Descreva detalhadamente a aparência física de uma pessoa com base apenas em uma imagem, priorizando objetividade e precisão. A análise deve incluir informações sobre altura, constituição física, tom de pele, características faciais, cor e estilo do cabelo, cor dos olhos, vestimenta, e quaisquer particularidades notáveis.
+
+Organize a descrição em um único parágrafo de até 300 palavras, começando pela visão geral da estrutura corporal e progredindo para detalhes específicos do rosto, cabelo e roupas. Evite interpretações subjetivas, opiniões ou informações não visuais. A linguagem deve ser direta, clara e profissional, adequada para fins formais."""},
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}},
                     ],
                 }
