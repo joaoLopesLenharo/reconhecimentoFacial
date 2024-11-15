@@ -22,7 +22,6 @@ Este projeto é um sistema de reconhecimento facial desenvolvido em Python que p
 /reconhecimentoFacial
 ├── app.py # Arquivo principal para executar o sistema
 ├── camera.py # Módulo para capturar imagens da câmera
-├── chamada.py # Módulo para gerenciar a chamada e o registro de presença
 ├── database.py # Módulo para interagir com o banco de dados SQLite
 ├── groq_api.py # Módulo para integração com a API Groq
 ├── interface.py # Módulo para a interface gráfica do usuário
