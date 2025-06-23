@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Controle de Presença</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+</head>
+<body class="bg-dark text-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark border-bottom border-secondary">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-camera"></i>
+                Sistema de Controle de Presença
+            </a>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="monitoramento-tab" data-bs-toggle="tab" data-bs-target="#monitoramento" type="button" role="tab">
+                    <i class="fas fa-video"></i> Monitoramento
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="cadastro-tab" data-bs-toggle="tab" data-bs-target="#cadastro" type="button" role="tab">
+                    <i class="fas fa-user-plus"></i> Cadastro Rápido
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="lista-tab" data-bs-toggle="tab" data-bs-target="#lista" type="button" role="tab">
+                    <i class="fas fa-list"></i> Listagem de Alunos
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content mt-3" id="myTabContent">
+            <!-- Monitoramento -->
+            <div class="tab-pane fade show active" id="monitoramento" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="card bg-dark border-secondary">
+                            <div class="card-body">
+                                <h5 class="card-title">Feed da Câmera</h5>
+                                <div class="camera-feed">
+                                    <img id="cameraFeed" class="img-fluid" alt="Inicie o monitoramento para ver o feed da câmera">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-dark border-secondary">
+                            <div class="card-body">
+                                <h5 class="card-title">Controles</h5>
+                                <div class="mb-3">
+                                    <label for="cameraSelect" class="form-label">Selecione a Câmera</label>
+                                    <select class="form-select bg-dark text-light border-secondary" id="cameraSelect">
+                                        <option value="0">Câmera 0</option>
+                                    </select>
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-primary" id="iniciarMonitoramento">
+                                        <i class="fas fa-play"></i> Iniciar Monitoramento
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card bg-dark border-secondary mt-3">
+                            <div class="card-body">
+                                <h5 class="card-title">Logs</h5>
+                                <div id="logs" class="logs-container"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cadastro Rápido -->
+            <div class="tab-pane fade" id="cadastro" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card bg-dark border-secondary">
+                            <div class="card-body">
+                                <h5 class="card-title">Cadastro de Aluno</h5>
+                                <form id="formCadastro">
+                                    <div class="mb-3">
+                                        <label for="idAluno" class="form-label">ID do Aluno</label>
+                                        <input type="text" class="form-control bg-dark text-light border-secondary" id="idAluno" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="nomeAluno" class="form-label">Nome do Aluno</label>
+                                        <input type="text" class="form-control bg-dark text-light border-secondary" id="nomeAluno" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="cameraSelectCadastro" class="form-label">Selecione a Câmera</label>
+                                        <select class="form-select bg-dark text-light border-secondary" id="cameraSelectCadastro">
+                                            <option value="0">Câmera 0</option>
+                                        </select>
+                                    </div>
+                                    <div class="d-grid gap-2">
+                                        <button type="button" class="btn btn-primary" id="capturarFoto">
+                                            <i class="fas fa-camera"></i> Capturar Foto
+                                        </button>
+                                        <button type="submit" class="btn btn-success" id="btnRegistrar" disabled>
+                                            <i class="fas fa-save"></i> Registrar Aluno
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" id="btnCancelarFoto" disabled>
+                                            <i class="fas fa-times"></i> Cancelar Foto
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card bg-dark border-secondary">
+                            <div class="card-body">
+                                <h5 class="card-title">Preview da Foto</h5>
+                                <div class="photo-preview">
+                                    <img id="fotoPreview" class="img-fluid" alt="Capture uma foto para ver o preview">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Listagem de Alunos -->
+            <div class="tab-pane fade" id="lista" role="tabpanel">
+                <div class="card bg-dark border-secondary">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="card-title mb-0">Alunos Cadastrados</h5>
+                            <button class="btn btn-primary" onclick="atualizarListaAlunos()">
+                                <i class="fas fa-sync"></i> Atualizar Lista
+                            </button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-dark table-hover" id="tabelaAlunos">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Nome</th>
+                                        <th>Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Dados serão inseridos via JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Edição -->
+    <div class="modal fade" id="modalEditar" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title">Editar Aluno</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formEditar">
+                        <div class="mb-3">
+                            <label for="editNome" class="form-label">Nome do Aluno</label>
+                            <input type="text" class="form-control bg-dark text-light border-secondary" id="editNome" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="editCameraSelect" class="form-label">Selecione a Câmera</label>
+                            <select class="form-select bg-dark text-light border-secondary" id="editCameraSelect">
+                                <option value="0">Câmera 0</option>
+                            </select>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-primary" id="capturarFotoEdit">
+                                <i class="fas fa-camera"></i> Capturar Nova Foto
+                            </button>
+                        </div>
+                    </form>
+                    <div class="mt-3">
+                        <h6>Preview da Nova Foto</h6>
+                        <div class="photo-preview">
+                            <img id="fotoPreviewEdit" class="img-fluid" alt="Capture uma nova foto">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btnSalvarEdit" disabled>Salvar Alterações</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html> 
