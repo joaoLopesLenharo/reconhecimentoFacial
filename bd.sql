@@ -39,6 +39,19 @@ CREATE TABLE IF NOT EXISTS `mydb`.`presencas` (
 ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8;
 
+-- Tabela de Responsável do Aluno (1:1)
+CREATE TABLE IF NOT EXISTS `mydb`.`responsavel` (
+  `id_responsavel` INT(11) NOT NULL AUTO_INCREMENT,
+  `id_aluno` INT(11) NOT NULL,
+  `telefone` VARCHAR(20) NOT NULL,
+  `email` VARCHAR(100) NOT NULL,
+  PRIMARY KEY (`id_responsavel`),
+  UNIQUE KEY `uq_responsavel_aluno` (`id_aluno`),
+  CONSTRAINT `fk_responsavel_aluno`
+    FOREIGN KEY (`id_aluno`) REFERENCES `mydb`.`alunos` (`Id`)
+    ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
 CREATE TABLE IF NOT EXISTS `mydb`.`reconhecimento_aluno` (
   `id_rn` INT(11) NOT NULL,
   `infoRec` VARCHAR(200) NOT NULL,

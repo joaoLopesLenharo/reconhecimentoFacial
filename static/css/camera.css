@@ -1,0 +1,68 @@
+/* Camera Container */
+#cameraContainer {
+    position: relative;
+    min-height: 300px;
+    background-color: #1a1a1a;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Loading State */
+.camera-loading {
+    padding: 2rem;
+    text-align: center;
+}
+
+.camera-loading .spinner-border {
+    width: 3rem;
+    height: 3rem;
+    border-width: 0.25rem;
+}
+
+/* Error State */
+.camera-error {
+    padding: 2rem;
+    text-align: center;
+}
+
+.camera-error .btn {
+    min-width: 180px;
+}
+
+/* Video Feed */
+#cameraFeed {
+    max-width: 100%;
+    max-height: 70vh;
+    display: block;
+    margin: 0 auto;
+}
+
+/* Camera Controls */
+.camera-controls {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    #cameraContainer {
+        min-height: 250px;
+    }
+    
+    .camera-loading, 
+    .camera-error {
+        padding: 1.5rem;
+    }
+    
+    .camera-loading .spinner-border {
+        width: 2.5rem;
+        height: 2.5rem;
+    }
+}

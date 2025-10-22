@@ -54,6 +54,19 @@ def criar_tabelas_se_nao_existir(conn):
             ON DELETE CASCADE ON UPDATE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
     ''')
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS responsavel (
+        id_responsavel INT NOT NULL AUTO_INCREMENT,
+        id_aluno INT NOT NULL,
+        telefone VARCHAR(20) NOT NULL,
+        email VARCHAR(100) NOT NULL,
+        PRIMARY KEY (id_responsavel),
+        UNIQUE KEY uq_responsavel_aluno (id_aluno),
+        CONSTRAINT fk_responsavel_aluno FOREIGN KEY (id_aluno)
+            REFERENCES alunos (Id)
+            ON DELETE CASCADE ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+    ''')
     conn.commit()
     cursor.close()
 
@@ -92,15 +105,27 @@ def listar_cameras_disponiveis():
     return cameras_disponiveis
 
 def extrair_codificacao_facial(frame):
+    """Extrai codificação facial de um frame BGR (uint8). Retorna lista ou None se não houver face."""
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     codificacoes = face_recognition.face_encodings(rgb_frame)
     if codificacoes:
         return codificacoes[0].tolist()
     return None
 
-def cadastrar_aluno(id_aluno, nome, frame):
-    if not id_aluno or not nome:
+def cadastrar_aluno(id_aluno, nome, frame, resp_telefone=None, resp_email=None):
+    # Validações de entrada
+    if id_aluno is None or (isinstance(id_aluno, (int, float)) and int(id_aluno) <= 0):
+        raise ValueError("ID de aluno inválido.")
+    if not nome:
         raise ValueError("ID e nome são obrigatórios.")
+    if frame is None or not isinstance(frame, np.ndarray) or frame.size == 0:
+        raise ValueError("Imagem inválida.")
+    if frame.dtype != np.uint8:
+        # Normaliza para uint8 quando possível
+        try:
+            frame = frame.astype(np.uint8)
+        except Exception:
+            raise ValueError("Imagem inválida.")
     
     codificacao_facial = extrair_codificacao_facial(frame)
     if codificacao_facial is None:
@@ -114,6 +139,12 @@ def cadastrar_aluno(id_aluno, nome, frame):
             "INSERT INTO alunos (Id, Nome, codificacao_facial) VALUES (%s, %s, %s)",
             (id_aluno, nome, codificacao_json)
         )
+        # Se dados do responsável forem informados, cria o vínculo 1:1
+        if resp_telefone and resp_email:
+            cursor.execute(
+                "INSERT INTO responsavel (id_aluno, telefone, email) VALUES (%s, %s, %s)",
+                (id_aluno, resp_telefone, resp_email)
+            )
         conn.commit()
     except mysql.connector.IntegrityError:
         conn.rollback()
@@ -125,7 +156,14 @@ def cadastrar_aluno(id_aluno, nome, frame):
 def listar_alunos():
     conn = conectar_mysql()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT Id, Nome, codificacao_facial FROM alunos")
+    cursor.execute(
+        """
+        SELECT a.Id, a.Nome, a.codificacao_facial,
+               r.telefone AS resp_telefone, r.email AS resp_email
+        FROM alunos a
+        LEFT JOIN responsavel r ON r.id_aluno = a.Id
+        """
+    )
     alunos = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -133,7 +171,7 @@ def listar_alunos():
         aluno['codificacao_facial'] = json.loads(aluno['codificacao_facial'])
     return alunos
 
-def editar_aluno(id_aluno, novo_nome, frame=None):
+def editar_aluno(id_aluno, novo_nome, frame=None, resp_telefone=None, resp_email=None):
     if not novo_nome:
         raise ValueError("O novo nome é obrigatório.")
         
@@ -141,6 +179,15 @@ def editar_aluno(id_aluno, novo_nome, frame=None):
     cursor = conn.cursor()
     try:
         if frame is not None:
+            # Valida imagem antes de processar
+            if not isinstance(frame, np.ndarray) or frame.size == 0:
+                raise ValueError("A nova imagem é inválida.")
+            if frame.dtype != np.uint8:
+                try:
+                    frame = frame.astype(np.uint8)
+                except Exception:
+                    raise ValueError("A nova imagem é inválida.")
+            
             codificacao = extrair_codificacao_facial(frame)
             if codificacao is None:
                 raise RuntimeError("Nenhum rosto detectado na nova imagem.")
@@ -156,7 +203,39 @@ def editar_aluno(id_aluno, novo_nome, frame=None):
         
         if cursor.rowcount == 0:
             raise ValueError(f"Aluno com ID {id_aluno} não encontrado.")
-            
+
+        # Atualiza ou cria registro de responsável se os dados forem fornecidos
+        if resp_telefone is not None or resp_email is not None:
+            # Busca existência atual
+            cursor_check = conn.cursor()
+            cursor_check.execute("SELECT 1 FROM responsavel WHERE id_aluno = %s", (id_aluno,))
+            existe = cursor_check.fetchone() is not None
+            cursor_check.close()
+
+            if existe:
+                if resp_telefone is not None and resp_email is not None:
+                    cursor.execute(
+                        "UPDATE responsavel SET telefone = %s, email = %s WHERE id_aluno = %s",
+                        (resp_telefone, resp_email, id_aluno)
+                    )
+                elif resp_telefone is not None:
+                    cursor.execute(
+                        "UPDATE responsavel SET telefone = %s WHERE id_aluno = %s",
+                        (resp_telefone, id_aluno)
+                    )
+                elif resp_email is not None:
+                    cursor.execute(
+                        "UPDATE responsavel SET email = %s WHERE id_aluno = %s",
+                        (resp_email, id_aluno)
+                    )
+            else:
+                if resp_telefone and resp_email:
+                    cursor.execute(
+                        "INSERT INTO responsavel (id_aluno, telefone, email) VALUES (%s, %s, %s)",
+                        (id_aluno, resp_telefone, resp_email)
+                    )
+                # Se apenas um dos campos vier sem existir registro, ignora para manter consistência
+
         conn.commit()
     finally:
         cursor.close()
@@ -170,6 +249,21 @@ def excluir_aluno(id_aluno):
         if cursor.rowcount == 0:
             raise ValueError(f"Aluno com ID {id_aluno} não encontrado para exclusão.")
         conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
+def obter_responsavel_por_aluno(id_aluno):
+    """Retorna dict com telefone e email do responsável do aluno, ou None se não existir."""
+    conn = conectar_mysql()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT telefone, email FROM responsavel WHERE id_aluno = %s",
+            (id_aluno,)
+        )
+        row = cursor.fetchone()
+        return row
     finally:
         cursor.close()
         conn.close()

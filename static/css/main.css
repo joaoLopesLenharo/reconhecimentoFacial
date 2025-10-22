@@ -1,0 +1,383 @@
+/* Main CSS - Text visibility and contrast improvements */
+
+/* Global text contrast improvements */
+body {
+    background-color: #121212;
+    color: #e0e0e0;
+}
+
+/* Card improvements */
+.card {
+    background-color: #1e1e1e !important;
+    border: 1px solid #333 !important;
+}
+
+.card-body {
+    background-color: #1e1e1e;
+}
+
+.card-title {
+    color: #ffffff !important;
+    font-weight: 600;
+}
+
+/* Text visibility improvements */
+.text-muted {
+    color: #b0b0b0 !important;
+}
+
+.text-light {
+    color: #f8f9fa !important;
+}
+
+.text-secondary {
+    color: #adb5bd !important;
+}
+
+/* Form elements */
+.form-control, .form-select {
+    background-color: #2a2a2a !important;
+    border-color: #444 !important;
+    color: #e0e0e0 !important;
+}
+
+.form-control:focus, .form-select:focus {
+    background-color: #2a2a2a !important;
+    border-color: #6c757d !important;
+    color: #e0e0e0 !important;
+    box-shadow: 0 0 0 0.25rem rgba(108, 117, 125, 0.25) !important;
+}
+
+.form-label {
+    color: #e0e0e0 !important;
+    font-weight: 500;
+}
+
+.input-group-text {
+    background-color: #333 !important;
+    border-color: #444 !important;
+    color: #e0e0e0 !important;
+}
+
+/* Button improvements */
+.btn {
+    font-weight: 500;
+}
+
+.btn-outline-primary {
+    color: #6ea8fe !important;
+    border-color: #6ea8fe !important;
+}
+
+.btn-outline-primary:hover {
+    background-color: #6ea8fe !important;
+    color: #000 !important;
+}
+
+/* Alert improvements */
+.alert {
+    border: none;
+    font-weight: 500;
+}
+
+.alert-info {
+    background-color: #1f4e79 !important;
+    color: #b8daff !important;
+}
+
+.alert-success {
+    background-color: #0f4229 !important;
+    color: #a3d9a5 !important;
+}
+
+.alert-warning {
+    background-color: #664d03 !important;
+    color: #ffecb5 !important;
+}
+
+.alert-danger {
+    background-color: #58151c !important;
+    color: #f1aeb5 !important;
+}
+
+/* Table improvements */
+.table-dark {
+    --bs-table-bg: #1e1e1e;
+    --bs-table-color: #e0e0e0;
+    --bs-table-border-color: #333;
+    --bs-table-striped-bg: #2a2a2a;
+    --bs-table-hover-bg: #333;
+}
+
+.table th {
+    color: #ffffff !important;
+    font-weight: 600;
+    border-color: #444 !important;
+}
+
+.table td {
+    color: #e0e0e0 !important;
+    border-color: #333 !important;
+}
+
+/* Tab improvements */
+.nav-tabs {
+    border-bottom-color: #444;
+}
+
+.nav-tabs .nav-link {
+    color: #b0b0b0;
+    border-color: transparent;
+}
+
+.nav-tabs .nav-link:hover {
+    color: #e0e0e0;
+    border-color: #444;
+}
+
+.nav-tabs .nav-link.active {
+    color: #ffffff !important;
+    background-color: #1e1e1e !important;
+    border-color: #444 #444 #1e1e1e !important;
+}
+
+/* Modal improvements */
+.modal-content {
+    background-color: #1e1e1e !important;
+    border-color: #444 !important;
+}
+
+.modal-header {
+    border-bottom-color: #444 !important;
+}
+
+.modal-footer {
+    border-top-color: #444 !important;
+}
+
+.modal-title {
+    color: #ffffff !important;
+}
+
+/* Logs container styling */
+.logs-container {
+    background-color: #0d1117 !important;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.log-entry {
+    padding: 4px 0;
+    border-bottom: 1px solid #21262d;
+    margin-bottom: 4px;
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.log-entry.success {
+    color: #3fb950;
+}
+
+.log-entry.error {
+    color: #f85149;
+}
+
+.log-entry.warning {
+    color: #d29922;
+}
+
+.log-entry.info {
+    color: #58a6ff;
+}
+
+.log-entry .timestamp {
+    color: #7d8590;
+    font-size: 0.75rem;
+}
+
+.log-entry .message {
+    color: #e6edf3;
+}
+
+/* Camera status indicators */
+.camera-status {
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 10px;
+}
+
+.camera-status.loading {
+    background-color: #1f4e79;
+    color: #b8daff;
+    border-left: 4px solid #6ea8fe;
+}
+
+.camera-status.success {
+    background-color: #0f4229;
+    color: #a3d9a5;
+    border-left: 4px solid #3fb950;
+}
+
+.camera-status.error {
+    background-color: #58151c;
+    color: #f1aeb5;
+    border-left: 4px solid #f85149;
+}
+
+.camera-status.warning {
+    background-color: #664d03;
+    color: #ffecb5;
+    border-left: 4px solid #d29922;
+}
+
+/* Scrollbar styling for dark theme */
+.logs-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.logs-container::-webkit-scrollbar-track {
+    background: #21262d;
+    border-radius: 4px;
+}
+
+.logs-container::-webkit-scrollbar-thumb {
+    background: #484f58;
+    border-radius: 4px;
+}
+
+.logs-container::-webkit-scrollbar-thumb:hover {
+    background: #6e7681;
+}
+
+/* Loading spinner improvements */
+.spinner-border {
+    color: #6ea8fe !important;
+}
+
+/* Tooltip improvements */
+.tooltip-inner {
+    background-color: #2a2a2a !important;
+    color: #e0e0e0 !important;
+    border: 1px solid #444;
+}
+
+.bs-tooltip-top .tooltip-arrow::before {
+    border-top-color: #2a2a2a !important;
+}
+
+.bs-tooltip-bottom .tooltip-arrow::before {
+    border-bottom-color: #2a2a2a !important;
+}
+
+.bs-tooltip-start .tooltip-arrow::before {
+    border-left-color: #2a2a2a !important;
+}
+
+.bs-tooltip-end .tooltip-arrow::before {
+    border-right-color: #2a2a2a !important;
+}
+
+/* Camera container improvements */
+#cameraContainer {
+    background-color: #0d1117;
+    border: 2px dashed #30363d;
+    border-radius: 8px;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#cameraContainer img, #cameraContainer video {
+    max-width: 100%;
+    max-height: 400px;
+    border-radius: 6px;
+}
+
+/* Test mode display */
+.test-camera-display {
+    background-color: #1e1e1e !important;
+    border: 2px solid #444;
+    color: #e0e0e0 !important;
+}
+
+/* Face recognition status */
+.face-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin: 2px;
+}
+
+.face-status.recognized {
+    background-color: #0f4229;
+    color: #a3d9a5;
+}
+
+.face-status.unknown {
+    background-color: #664d03;
+    color: #ffecb5;
+}
+
+.face-status.absent {
+    background-color: #58151c;
+    color: #f1aeb5;
+}
+
+/* Email status indicators */
+.email-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin: 2px;
+}
+
+.email-status.sent {
+    background-color: #0f4229;
+    color: #a3d9a5;
+}
+
+.email-status.failed {
+    background-color: #58151c;
+    color: #f1aeb5;
+}
+
+.email-status.pending {
+    background-color: #1f4e79;
+    color: #b8daff;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .logs-container {
+        max-height: 200px;
+        font-size: 0.8rem;
+    }
+    
+    .camera-status {
+        font-size: 0.85rem;
+        padding: 6px 10px;
+    }
+    
+    .face-status, .email-status {
+        font-size: 0.75rem;
+        padding: 3px 6px;
+    }
+}

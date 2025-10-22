@@ -1,15 +1,205 @@
 // static/js/app.js
 
 // --- INICIALIZAÇÃO E VARIÁVEIS GLOBAIS ---
+console.log('Initializing WebSocket connection...');
 const socket = io();
+// Expose socket globally for other modules (e.g., camera-system.js)
+window.socket = socket;
+
+// Debug WebSocket connection events
+socket.on('connect', () => {
+    console.log('WebSocket connected with ID:', socket.id);
+});
+
+socket.on('disconnect', () => {
+    console.log('WebSocket disconnected');
+});
+
+socket.on('connect_error', (error) => {
+    console.error('WebSocket connection error:', error);
+});
 let fotoCapturada = null;
 let streamAtivo = null;
+let testMode = false;
+let multiCameraView = false;
+let activeCameras = [];
+let testVideos = [];
+let isMonitoring = false;
 
-// --- ELEMENTOS DA UI ---
-const cameraFeed = document.getElementById('cameraFeed');
-const logsContainer = document.getElementById('logs');
-const iniciarMonitoramentoBtn = document.getElementById('iniciarMonitoramento');
-const pararMonitoramentoBtn = document.getElementById('pararMonitoramento');
+// Configuração de e-mail padrão
+let emailConfig = {
+    SMTP_SERVER: '',
+    SMTP_PORT: 587,
+    SMTP_USERNAME: '',
+    SMTP_PASSWORD: '',
+    SMTP_SENDER_EMAIL: '',
+    SMTP_SENDER_NAME: 'Sistema de Monitoramento'
+};
+
+// Função para preencher o dropdown de câmeras
+function preencherCameras(cameras) {
+    const select = document.getElementById('cameraSelect');
+    if (!select) return;
+    
+    // Limpa opções existentes
+    select.innerHTML = '';
+    
+    // Adiciona opção padrão
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Selecione uma câmera';
+    defaultOption.disabled = true;
+    defaultOption.selected = true;
+    select.appendChild(defaultOption);
+    
+    // Adiciona as câmeras disponíveis
+    cameras.forEach(camera => {
+        const option = document.createElement('option');
+        option.value = camera.id;
+        option.textContent = camera.name;
+        select.appendChild(option);
+    });
+}
+
+// Função para preencher a tabela de alunos
+function preencherTabelaAlunos(alunos) {
+    const tbody = document.querySelector('#tabelaAlunos tbody');
+    if (!tbody) return;
+    
+    // Limpa a tabela
+    tbody.innerHTML = '';
+    
+    // Adiciona cada aluno na tabela
+    alunos.forEach(aluno => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${aluno.Id}</td>
+            <td>${aluno.Nome}</td>
+            <td>${aluno.resp_email || 'Não informado'}</td>
+            <td>${aluno.resp_telefone || 'Não informado'}</td>
+            <td>
+                <button class="btn btn-sm btn-warning btn-editar" data-id="${aluno.Id}">
+                    <i class="fas fa-edit"></i> Editar
+                </button>
+                <button class="btn btn-sm btn-danger btn-excluir" data-id="${aluno.Id}">
+                    <i class="fas fa-trash"></i> Excluir
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// Função para carregar dados iniciais
+async function carregarDadosIniciais() {
+    try {
+        console.log('Carregando configuração de e-mail...');
+        const emailResponse = await fetch('/api/email-config');
+        if (!emailResponse.ok) throw new Error('Erro ao carregar configuração de e-mail');
+        const emailData = await emailResponse.json();
+        
+        if (emailData.success && emailData.config) {
+            console.log('Configuração de e-mail carregada:', emailData.config);
+            emailConfig = { ...emailConfig, ...emailData.config };
+        } else {
+            console.warn('Configuração de e-mail não encontrada, usando padrão');
+        }
+
+        console.log('Carregando lista de câmeras...');
+        const camerasResponse = await fetch('/api/cameras');
+        if (!camerasResponse.ok) throw new Error('Erro ao carregar lista de câmeras');
+        const camerasData = await camerasResponse.json();
+        console.log('Câmeras disponíveis:', camerasData);
+        
+        // Preenche o dropdown de câmeras
+        if (camerasData.success && camerasData.cameras) {
+            preencherCameras(camerasData.cameras);
+        }
+
+        console.log('Carregando lista de alunos...');
+        const alunosResponse = await fetch('/api/alunos');
+        if (!alunosResponse.ok) throw new Error('Erro ao carregar lista de alunos');
+        const alunosData = await alunosResponse.json();
+        console.log('Alunos carregados:', alunosData);
+        
+        // Preenche a tabela de alunos
+        if (alunosData.success && alunosData.alunos) {
+            preencherTabelaAlunos(alunosData.alunos);
+        }
+        
+    } catch (error) {
+        console.error('Erro ao carregar dados iniciais:', error);
+        mostrarAlerta(`Erro ao carregar dados: ${error.message}`, 'danger');
+    }
+}
+
+// Inicializa tooltips
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM carregado, iniciando carregamento de dados...');
+    
+    // Inicializa tooltips do Bootstrap
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // Inicializa validação de formulário
+    const forms = document.querySelectorAll('.needs-validation');
+    Array.from(forms).forEach(form => {
+        form.addEventListener('submit', event => {
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            form.classList.add('was-validated');
+        }, false);
+    });
+    
+    // Inicia carregamento dos dados
+    carregarDadosIniciais();
+});
+
+// Atualiza um frame de forma segura com tratamento de erros
+function updateFrameSafely(element, frameData, cameraId) {
+    try {
+        // Usa requestAnimationFrame para suavizar a atualização
+        requestAnimationFrame(() => {
+            try {
+                // Verifica se o elemento ainda está no DOM
+                if (!document.body.contains(element)) {
+                    console.log('Elemento da câmera não encontrado no DOM');
+                    return;
+                }
+                
+                // Atualiza a fonte da imagem
+                element.src = `data:image/jpeg;base64,${frameData}`;
+                
+                // Configura tratamento de erros
+                element.onerror = () => {
+                    console.error('Erro ao carregar o frame da câmera:', cameraId);
+                    element.src = '';
+                    mostrarEstadoCamera(false, `Erro ao carregar o vídeo da câmera ${cameraId}`);
+                };
+                
+                // Quando a imagem carrega com sucesso
+                element.onload = () => {
+                    // Remove qualquer mensagem de erro/loading
+                    const container = document.getElementById('cameraContainer');
+                    if (container) {
+                        const errorElements = container.querySelectorAll('.camera-error, .camera-loading');
+                        errorElements.forEach(el => el.remove());
+                    }
+                };
+                
+            } catch (e) {
+                console.error('Erro ao atualizar o frame da câmera:', e);
+                mostrarEstadoCamera(false, 'Erro ao exibir o vídeo da câmera');
+            }
+        });
+    } catch (e) {
+        console.error('Erro ao agendar atualização do frame:', e);
+    }
+}
 
 // --- FUNÇÕES AUXILIARES ---
 function mostrarAlerta(mensagem, tipo = 'success') {
@@ -32,282 +222,395 @@ function pararStreamDeVideo(stream = streamAtivo) {
     }
 }
 
-async function popularSeletoresDeCameraCliente() {
-    console.log("JS: Iniciando busca por câmeras no navegador...");
-    if (!navigator.mediaDevices?.enumerateDevices) {
-        console.error("JS: enumerateDevices() não é suportado por este navegador.");
-        mostrarAlerta("Seu navegador não suporta a seleção de câmeras.", "warning");
-        return;
-    }
-
+// Função para carregar vídeos de teste
+async function carregarVideosTeste() {
     try {
-        console.log("JS: Solicitando permissão de câmera para listar dispositivos...");
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        pararStreamDeVideo(stream);
-
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        console.log("JS: Dispositivos encontrados:", devices);
-
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
-        console.log("JS: Dispositivos de vídeo filtrados:", videoDevices);
-
-        const selectors = document.querySelectorAll('#cameraSelectCadastro, #cameraSelectEdit');
-
-        if (videoDevices.length === 0) {
-            console.warn("JS: Nenhuma câmera (videoinput) foi encontrada.");
-            mostrarAlerta("Nenhuma câmera foi encontrada pelo navegador.", "warning");
-            selectors.forEach(selector => selector.innerHTML = '<option value="">Nenhuma câmera encontrada</option>');
-            return;
+        const response = await fetch('/api/test-videos');
+        if (!response.ok) {
+            throw new Error('Erro ao carregar vídeos de teste');
         }
-
-        selectors.forEach(selector => {
-            selector.innerHTML = '';
-            videoDevices.forEach((device, index) => {
-                const option = document.createElement('option');
-                option.value = device.deviceId;
-                option.text = device.label || `Câmera ${index + 1}`;
-                selector.appendChild(option);
-            });
-        });
-        console.log("JS: Seletores de câmera para cadastro/edição populados com sucesso.");
-
-    } catch (err) {
-        console.error("JS: Erro ao enumerar ou obter permissão para dispositivos:", err);
-        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-            mostrarAlerta("Permissão de câmera negada. Habilite nas configurações do seu navegador.", "danger");
-        } else {
-            mostrarAlerta("Erro ao listar as câmeras. Veja o console (F12) para detalhes.", "danger");
-        }
+        const data = await response.json();
+        return data.videos || [];
+    } catch (error) {
+        console.error('Erro ao carregar vídeos de teste:', error);
+        mostrarAlerta('Erro ao carregar vídeos de teste', 'danger');
+        return [];
     }
 }
 
-// --- LÓGICA DE CAPTURA DE FOTO (CLIENT-SIDE) ---
-function configurarControlesDeCamera(tipo) {
-    const btnAbrir = document.getElementById(`btnAbrirCamera${tipo}`);
-    const btnTirar = document.getElementById(`btnTirarFoto${tipo}`);
-    const videoPreview = document.getElementById(`videoPreview${tipo}`);
-    const fotoPreview = document.getElementById(tipo === 'Cadastro' ? 'fotoPreview' : 'fotoPreviewEdit');
-    const cameraSelector = document.getElementById(`cameraSelect${tipo}`);
-    const btnRegistrar = document.getElementById('btnRegistrar');
-    const btnCancelar = document.getElementById('btnCancelarCadastro');
+// Função para atualizar a visualização das câmeras
+function atualizarVisualizacaoCameras() {
+    const container = document.getElementById('cameraContainer');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (multiCameraView && activeCameras.length > 0) {
+        // Modo grade para múltiplas câmeras
+        const row = document.createElement('div');
+        row.className = 'row g-2';
+        
+        activeCameras.forEach((camera, index) => {
+            const col = document.createElement('div');
+            col.className = 'col-md-6';
+            
+            const card = document.createElement('div');
+            card.className = 'card bg-dark border-secondary mb-2';
+            
+            const cardBody = document.createElement('div');
+            cardBody.className = 'card-body p-2';
+            
+            const title = document.createElement('h6');
+            title.className = 'card-title text-center small';
+            title.textContent = camera.name || `Câmera ${index + 1}`;
+            
+            const video = document.createElement('img');
+            video.id = `cameraFeed-${camera.id}`;
+            video.className = 'img-fluid rounded';
+            video.alt = `Feed da ${camera.name || `Câmera ${index + 1}`}`;
+            
+            cardBody.appendChild(title);
+            cardBody.appendChild(video);
+            card.appendChild(cardBody);
+            col.appendChild(card);
+            row.appendChild(col);
+        });
+        
+        container.appendChild(row);
+    } else if (activeCameras.length > 0) {
+        // Modo de visualização única
+        const video = document.createElement('img');
+        video.id = 'cameraFeed';
+        video.className = 'img-fluid';
+        video.alt = `Feed da ${activeCameras[0].name || 'Câmera'}`;
+        container.appendChild(video);
+    } else {
+        // Nenhuma câmera ativa
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-info';
+    }
+}
 
-    btnAbrir.addEventListener('click', async () => {
-        pararStreamDeVideo();
-        if (!cameraSelector || !cameraSelector.value) {
-            mostrarAlerta("Nenhuma câmera selecionada ou encontrada.", "warning");
+// Mostra o estado de carregamento da câmera
+function mostrarEstadoCamera(carregando = true, mensagem = '') {
+    const container = document.getElementById('cameraContainer');
+    if (!container) return;
+    
+    if (carregando) {
+        container.innerHTML = `
+            <div class="camera-loading text-center py-5">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Carregando...</span>
+                </div>
+                <p class="text-light">${mensagem || 'Iniciando câmera...'}</p>
+            </div>
+        `;
+    } else if (mensagem) {
+        container.innerHTML = `
+            <div class="camera-error text-center py-5">
+                <i class="fas fa-video-slash text-danger mb-3" style="font-size: 3rem;"></i>
+                <p class="text-light">${mensagem}</p>
+                <button class="btn btn-primary mt-3" onclick="carregarDadosIniciais()">
+                    <i class="fas fa-sync"></i> Tentar novamente
+                </button>
+            </div>
+        `;
+    } else {
+        container.innerHTML = '<img id="cameraFeed" class="img-fluid" alt="Feed da câmera">';
+    }
+}
+
+// --- LÓGICA DE MONITORAMENTO ---
+function configurarMonitoramento() {
+    const cameraFeed = document.getElementById('cameraFeed');
+    const iniciarBtn = document.getElementById('iniciarMonitoramento');
+    const pararBtn = document.getElementById('pararMonitoramento');
+    
+    if (!iniciarBtn || !pararBtn) {
+        console.error('Botões de monitoramento não encontrados');
+        return;
+    }
+    
+    // Configura timeout global para operações de câmera
+    let cameraTimeout;
+    const CAMERA_TIMEOUT_MS = 10000; // 10 segundos
+    
+    function limparCameraTimeout() {
+        if (cameraTimeout) {
+            clearTimeout(cameraTimeout);
+            cameraTimeout = null;
+        }
+    }
+    
+    async function iniciarMonitoramento() {
+        try {
+            const cameraSelect = document.getElementById('cameraSelect');
+            const cameraId = cameraSelect ? cameraSelect.value : null;
+            
+            // Mostra estado de carregamento
+            mostrarEstadoCamera(true, 'Iniciando câmera...');
+            
+            // Configura timeout
+            limparCameraTimeout();
+            cameraTimeout = setTimeout(() => {
+                mostrarEstadoCamera(false, 'Tempo esgotado ao tentar conectar à câmera.');
+                iniciarBtn.disabled = false;
+                iniciarBtn.innerHTML = '<i class="fas fa-play"></i> Iniciar Monitoramento';
+            }, CAMERA_TIMEOUT_MS);
+            
+            // Atualiza estado dos botões
+            iniciarBtn.disabled = true;
+            iniciarBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Iniciando...';
+            pararBtn.disabled = true;
+            
+            if (testMode) {
+                // No modo teste, carrega todos os vídeos disponíveis
+                testVideos = await carregarVideosTeste();
+                if (testVideos.length === 0) {
+                    mostrarAlerta('Nenhum vídeo de teste encontrado na pasta test_videos!', 'warning');
+                    return;
+                }
+                
+                // Para cada vídeo, inicia um monitoramento
+                for (let i = 0; i < testVideos.length; i++) {
+                    socket.emit('start_monitoring', { 
+                        camera_id: i, 
+                        test_mode: true 
+                    });
+                    
+                    // Adiciona a câmera à lista de ativas
+                    if (!activeCameras.some(cam => cam.id === i)) {
+                        activeCameras.push({ 
+                            id: i, 
+                            name: testVideos[i].name || `Vídeo ${i+1}` 
+                        });
+                    }
+                }
+            } else {
+                // Modo normal: usa câmera selecionada
+                const cameraId = document.getElementById('cameraSelect').value;
+                if (!cameraId) {
+                    mostrarAlerta('Selecione uma câmera primeiro!', 'warning');
+                    return;
+                }
+                
+                socket.emit('start_monitoring', { 
+                    camera_id: cameraId, 
+                    test_mode: false 
+                });
+                
+                // Adiciona a câmera à lista de ativas
+                if (!activeCameras.some(cam => cam.id === cameraId)) {
+                    activeCameras.push({ 
+                        id: cameraId, 
+                        name: `Câmera ${cameraId}` 
+                    });
+                }
+            }
+            
+            // Atualiza a interface
+            atualizarVisualizacaoCameras();
+            isMonitoring = true;
+            document.getElementById('iniciarMonitoramento').disabled = true;
+            document.getElementById('pararMonitoramento').disabled = false;
+        } catch (error) {
+            console.error('Erro ao iniciar monitoramento:', error);
+            mostrarAlerta(`Erro ao iniciar monitoramento: ${error.message}`, 'danger');
+        }
+    }
+    
+    function pararMonitoramento() {
+        try {
+            // Mostra estado de carregamento
+            mostrarEstadoCamera(true, 'Parando monitoramento...');
+            
+            // Para todas as câmeras ativas
+            const stopPromises = activeCameras.map(camera => {
+                return new Promise((resolve) => {
+                    socket.emit('stop_monitoring', { camera_id: camera.id }, resolve);
+                });
+            });
+            
+            // Aguarda todas as paradas serem confirmadas
+            Promise.all(stopPromises).then(() => {
+                // Limpa a lista de câmeras ativas
+                activeCameras = [];
+                isMonitoring = false;
+                
+                // Atualiza a interface
+                const iniciarBtn = document.getElementById('iniciarMonitoramento');
+                const pararBtn = document.getElementById('pararMonitoramento');
+                
+                if (iniciarBtn) iniciarBtn.disabled = false;
+                if (pararBtn) pararBtn.disabled = true;
+                
+                // Mostra mensagem de sucesso
+                mostrarEstadoCamera(false, 'Monitoramento parado com sucesso.');
+                
+                // Limpa o estado após 2 segundos
+                setTimeout(() => {
+                    mostrarEstadoCamera(false);
+                }, 2000);
+            });
+        } catch (error) {
+            console.error('Erro ao parar monitoramento:', error);
+            mostrarAlerta(`Erro ao parar monitoramento: ${error.message}`, 'danger');
+        }
+    }
+    
+    // Configura os eventos dos botões
+    if (iniciarBtn) iniciarBtn.addEventListener('click', iniciarMonitoramento);
+    if (pararBtn) pararBtn.addEventListener('click', pararMonitoramento);
+}
+
+// Configura os eventos de câmera (LEGADO)
+if (typeof window.CameraSystem === 'undefined') {
+socket.on('camera_ready', (data) => {
+    console.log('Câmera pronta:', data);
+    limparCameraTimeout();
+    mostrarEstadoCamera(false);
+    
+    const iniciarBtn = document.getElementById('iniciarMonitoramento');
+    const pararBtn = document.getElementById('pararMonitoramento');
+    
+    if (iniciarBtn) iniciarBtn.disabled = true;
+    if (pararBtn) pararBtn.disabled = false;
+});
+
+socket.on('camera_error', (error) => {
+    console.error('Erro na câmera:', error);
+    mostrarEstadoCamera(false, `Erro na câmera: ${error.message || 'Erro desconhecido'}`);
+    
+    const iniciarBtn = document.getElementById('iniciarMonitoramento');
+    const pararBtn = document.getElementById('pararMonitoramento');
+    
+    if (iniciarBtn) iniciarBtn.disabled = false;
+    if (pararBtn) pararBtn.disabled = true;
+    
+    limparCameraTimeout();
+});
+
+// --- SOCKET.IO E EVENTOS GERAIS ---
+const logsContainer = document.getElementById('logs');
+
+// Configura os eventos do WebSocket (LEGADO)
+socket.on('camera_frame', (data) => {
+    try {
+        // Debug: Log apenas uma vez a cada 60 frames para não sobrecarregar o console
+        if (!window.frameCounter) window.frameCounter = 0;
+        if (window.frameCounter++ % 60 === 0) {
+            console.log('Recebendo frames da câmera:', data.camera_id, 'Tamanho do frame:', data.frame ? data.frame.length + ' bytes' : 'vazio');
+        }
+        
+        const cameraId = data.camera_id;
+        
+        // Se não houver frame, não faz nada
+        if (!data.frame) {
+            if (window.frameCounter % 30 === 0) { // Avisa apenas a cada 30 frames ausentes
+                console.warn('Frame vazio recebido da câmera:', cameraId);
+            }
             return;
         }
         
-        const constraints = { video: { deviceId: { exact: cameraSelector.value } } };
-
-        try {
-            streamAtivo = await navigator.mediaDevices.getUserMedia(constraints);
-            videoPreview.srcObject = streamAtivo;
-            videoPreview.style.display = 'block';
-            fotoPreview.style.display = 'none';
-            videoPreview.play();
-            btnAbrir.style.display = 'none';
-            btnTirar.style.display = 'inline-block';
-            if(btnCancelar) btnCancelar.style.display = 'inline-block';
-        } catch (err) {
-            mostrarAlerta(`Não foi possível acessar a câmera: ${err.name}`, "danger");
-        }
-    });
-
-    btnTirar.addEventListener('click', () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = videoPreview.videoWidth;
-        canvas.height = videoPreview.videoHeight;
-        canvas.getContext('2d').drawImage(videoPreview, 0, 0);
-        fotoCapturada = canvas.toDataURL('image/jpeg');
-        fotoPreview.src = fotoCapturada;
-        fotoPreview.style.display = 'block';
-        pararStreamDeVideo();
-        videoPreview.style.display = 'none';
-        btnTirar.style.display = 'none';
-        btnAbrir.style.display = 'inline-block';
-        if(btnRegistrar) btnRegistrar.disabled = false;
-    });
-}
-
-configurarControlesDeCamera('Cadastro');
-configurarControlesDeCamera('Edit');
-
-document.getElementById('btnCancelarCadastro').addEventListener('click', () => {
-    pararStreamDeVideo();
-    document.getElementById('videoPreviewCadastro').style.display = 'none';
-    const fotoImg = document.getElementById('fotoPreview');
-    fotoImg.src = '';
-    fotoImg.alt = 'Abra a câmera para iniciar';
-    fotoImg.style.display = 'block';
-    document.getElementById('btnAbrirCameraCadastro').style.display = 'inline-block';
-    document.getElementById('btnTirarFotoCadastro').style.display = 'none';
-    document.getElementById('btnCancelarCadastro').style.display = 'none';
-    document.getElementById('btnRegistrar').disabled = true;
-    fotoCapturada = null;
-});
-
-// --- LÓGICA DE MONITORAMENTO ---
-iniciarMonitoramentoBtn.addEventListener('click', async () => {
-    try {
-        const cameraId = document.getElementById('cameraSelect').value;
-        if (cameraId === "") {
-            mostrarAlerta("Nenhuma câmera disponível para monitoramento.", "warning");
-            return;
-        }
-        const response = await fetch('/api/monitoramento/start', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ camera_id: parseInt(cameraId) })
-        });
-        const data = await response.json();
-        if (data.success) {
-            mostrarAlerta('Monitoramento iniciado.');
-            iniciarMonitoramentoBtn.disabled = true;
-            pararMonitoramentoBtn.disabled = false;
+        if (multiCameraView) {
+            // Modo multi-câmera: atualiza o frame específico
+            const elementId = `cameraFeed-${cameraId}`;
+            let feedElement = document.getElementById(elementId);
+            
+            // Se não encontrou o elemento, tenta criá-lo
+            if (!feedElement) {
+                const container = document.getElementById('cameraContainer');
+                if (container) {
+                    const cameraInfo = activeCameras.find(cam => cam.id == cameraId);
+                    const cameraName = cameraInfo ? cameraInfo.name : `Câmera ${cameraId}`;
+                    
+                    const cameraCard = document.createElement('div');
+                    cameraCard.className = 'camera-card';
+                    cameraCard.innerHTML = `
+                        <div class="camera-header">${cameraName}</div>
+                        <img id="${elementId}" class="camera-feed" alt="${cameraName}">
+                    `;
+                    container.appendChild(cameraCard);
+                    feedElement = document.getElementById(elementId);
+                }
+            }
+            
+            // Atualiza o frame se o elemento existir
+            if (feedElement) {
+                updateFrameSafely(feedElement, data.frame, cameraId);
+            }
         } else {
-            mostrarAlerta('Erro ao iniciar monitoramento: ' + data.error, 'danger');
+            // Modo de visualização única: atualiza apenas se for a câmera ativa
+            if (activeCameras.length > 0 && activeCameras[0].id == cameraId) {
+                let cameraFeed = document.getElementById('cameraFeed');
+                
+                // Se não existe, cria o elemento
+                if (!cameraFeed) {
+                    const container = document.getElementById('cameraContainer');
+                    if (container) {
+                        container.innerHTML = '<img id="cameraFeed" class="img-fluid" alt="Feed da câmera">';
+                        cameraFeed = document.getElementById('cameraFeed');
+                    }
+                }
+                
+                // Se encontrou o elemento, atualiza a imagem
+                if (cameraFeed) {
+                    updateFrameSafely(cameraFeed, data.frame, cameraId);
+                }
+            }
         }
-    } catch (e) {
-        mostrarAlerta('Erro de conexão ao iniciar monitoramento.', 'danger');
+    } catch (error) {
+        console.error('Erro ao processar frame:', error);
     }
 });
 
-pararMonitoramentoBtn.addEventListener('click', async () => {
-    try {
-        const response = await fetch('/api/monitoramento/stop', { method: 'POST' });
-        const data = await response.json();
-        if (data.success) {
-            mostrarAlerta('Monitoramento parado.');
-            iniciarMonitoramentoBtn.disabled = false;
-            pararMonitoramentoBtn.disabled = true;
-            cameraFeed.src = '';
-            cameraFeed.alt = 'Inicie o monitoramento para ver o feed da câmera';
-        }
-    } catch (e) {
-        mostrarAlerta('Erro de conexão ao parar monitoramento.', 'danger');
-    }
+// Trata erros do servidor
+socket.on('error', (error) => {
+    console.error('Erro no servidor:', error);
+    mostrarAlerta(`Erro: ${error.message || 'Erro desconhecido'}`, 'danger');
 });
 
-// --- LÓGICA DE ALUNOS (CRUD) ---
-function atualizarListaAlunos() {
-    fetch('/api/alunos')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                const tbody = document.querySelector('#tabelaAlunos tbody');
-                tbody.innerHTML = data.alunos.length > 0 ? data.alunos.map(aluno => `
-                    <tr>
-                        <td>${aluno._id}</td>
-                        <td>${aluno.nome}</td>
-                        <td>
-                            <button class="btn btn-sm btn-primary" onclick="abrirModalEditar('${aluno._id}', '${aluno.nome}')"><i class="fas fa-edit"></i> Editar</button>
-                            <button class="btn btn-sm btn-danger" onclick="excluirAluno('${aluno._id}')"><i class="fas fa-trash"></i> Excluir</button>
-                        </td>
-                    </tr>
-                `).join('') : '<tr><td colspan="3" class="text-center">Nenhum aluno cadastrado</td></tr>';
+// --- INICIALIZAÇÃO ---
+document.addEventListener('DOMContentLoaded', () => {
+    // Configura os controles de visualização
+    const testModeToggle = document.getElementById('testModeToggle');
+    const multiCameraToggle = document.getElementById('multiCameraView');
+    
+    if (testModeToggle) {
+        testModeToggle.addEventListener('change', (e) => {
+            testMode = e.target.checked;
+            // Se estiver monitorando, reinicia o monitoramento com o novo modo
+            if (isMonitoring) {
+                const btnIniciar = document.getElementById('iniciarMonitoramento');
+                const btnParar = document.getElementById('pararMonitoramento');
+                
+                if (btnParar && !btnParar.disabled) {
+                    // Simula o clique no botão de parar e depois no de iniciar
+                    btnParar.click();
+                    setTimeout(() => {
+                        btnIniciar.click();
+                    }, 500);
+                }
             }
         });
-}
-
-document.getElementById('formCadastro').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!fotoCapturada) {
-        mostrarAlerta('Tire uma foto antes de registrar!', 'warning');
-        return;
     }
-    const id = document.getElementById('idAluno').value;
-    const nome = document.getElementById('nomeAluno').value;
-    const response = await fetch('/api/alunos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, nome, frame: fotoCapturada })
-    });
-    const data = await response.json();
-    if (data.success) {
-        mostrarAlerta('Aluno cadastrado com sucesso!');
-        document.getElementById('formCadastro').reset();
-        document.getElementById('btnCancelarCadastro').click();
-        atualizarListaAlunos();
-    } else {
-        mostrarAlerta('Erro ao cadastrar aluno: ' + data.error, 'danger');
-    }
-});
-
-let alunoEditando = null;
-const modalEditar = new bootstrap.Modal(document.getElementById('modalEditar'));
-
-function abrirModalEditar(id, nome) {
-    alunoEditando = id;
-    document.getElementById('editNome').value = nome;
-    document.getElementById('fotoPreviewEdit').src = '';
-    document.getElementById('fotoPreviewEdit').alt = 'Abra a câmera se desejar uma nova foto';
-    document.getElementById('videoPreviewEdit').style.display = 'none';
-    document.getElementById('btnAbrirCameraEdit').style.display = 'inline-block';
-    document.getElementById('btnTirarFotoEdit').style.display = 'none';
-    fotoCapturada = null;
-    modalEditar.show();
-}
-
-document.getElementById('btnSalvarEdit').addEventListener('click', async () => {
-    const nome = document.getElementById('editNome').value;
-    const response = await fetch(`/api/alunos/${alunoEditando}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, frame: fotoCapturada })
-    });
-    const data = await response.json();
-    if (data.success) {
-        mostrarAlerta('Aluno atualizado com sucesso!');
-        modalEditar.hide();
-        atualizarListaAlunos();
-    } else {
-        mostrarAlerta('Erro ao atualizar aluno: ' + data.error, 'danger');
-    }
-});
-
-document.getElementById('modalEditar').addEventListener('hidden.bs.modal', pararStreamDeVideo);
-
-async function excluirAluno(id) {
-    if (!confirm('Tem certeza que deseja excluir este aluno?')) return;
-    const response = await fetch(`/api/alunos/${id}`, { method: 'DELETE' });
-    const data = await response.json();
-    if (data.success) {
-        mostrarAlerta('Aluno excluído com sucesso!');
-        atualizarListaAlunos();
-    } else {
-        mostrarAlerta('Erro ao excluir aluno: ' + data.error, 'danger');
-    }
-}
-
-// --- SOCKET.IO E EVENTOS GERAIS ---
-socket.on('frame', (data) => {
-    cameraFeed.src = data.frame;
-});
-socket.on('log', (data) => {
-    const log = document.createElement('div');
-    log.className = 'log-item';
-    log.textContent = data.mensagem;
-    logsContainer.insertBefore(log, logsContainer.firstChild);
-    if (logsContainer.children.length > 50) {
-        logsContainer.removeChild(logsContainer.lastChild);
-    }
-});
-
-document.addEventListener('DOMContentLoaded', () => {
-    fetch('/api/cameras')
-      .then(res => res.json())
-      .then(data => {
-        const select = document.getElementById('cameraSelect');
-        if(data.success && data.cameras.length > 0){
-            select.innerHTML = data.cameras.map(cam => `<option value="${cam}">Câmera ${cam}</option>`).join('');
-        } else {
-            select.innerHTML = '<option value="">Nenhuma câmera encontrada</option>';
-        }
-      });
     
-    popularSeletoresDeCameraCliente();
+    if (multiCameraToggle) {
+        multiCameraToggle.addEventListener('change', (e) => {
+            multiCameraView = e.target.checked;
+            // Atualiza a visualização sem reiniciar o monitoramento
+            atualizarVisualizacaoCameras();
+        });
+    }
     
-    atualizarListaAlunos();
-    document.getElementById('lista-tab').addEventListener('shown.bs.tab', atualizarListaAlunos);
+    // Inicializa o monitoramento (LEGADO)
+    // Se o novo CameraSystem estiver presente, não inicializa o fluxo legado para evitar conflitos
+    if (window.CameraSystem) {
+        console.log('[app.js] CameraSystem detectado. Ignorando UI legada de monitoramento.');
+    } else {
+        configurarMonitoramento();
+    }
 });
+
+// Expose socket globally
+window.socket = socket;

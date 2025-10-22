@@ -1,0 +1,297 @@
+// static/js/app.js
+
+// --- INICIALIZAÇÃO E VARIÁVEIS GLOBAIS ---
+const socket = io();
+let fotoCapturada = null;
+let streamAtivo = null;
+let testMode = false;
+let multiCameraView = false;
+let activeCameras = [];
+let testVideos = [];
+let isMonitoring = false;
+
+// Configuração de e-mail padrão
+let emailConfig = {
+    SMTP_SERVER: '',
+    SMTP_PORT: 587,
+    SMTP_USERNAME: '',
+    SMTP_PASSWORD: '',
+    SMTP_SENDER_EMAIL: '',
+    SMTP_SENDER_NAME: 'Sistema de Monitoramento'
+};
+
+// Tenta carregar a configuração de e-mail do servidor
+fetch('/api/email-config')
+    .then(response => {
+        if (!response.ok) throw new Error('Erro ao carregar configuração');
+        return response.json();
+    })
+    .then(data => {
+        if (data.success && data.config) {
+            console.log('Configuração de e-mail carregada:', data.config);
+            emailConfig = { ...emailConfig, ...data.config };
+        } else {
+            console.warn('Configuração de e-mail não encontrada, usando padrão');
+        }
+    })
+    .catch(error => {
+        console.warn('Usando configuração de e-mail padrão:', error.message);
+    });
+
+// --- FUNÇÕES AUXILIARES ---
+function mostrarAlerta(mensagem, tipo = 'success') {
+    const alerta = document.createElement('div');
+    alerta.className = `alert alert-${tipo} alert-dismissible fade show alerta-persistente`;
+    alerta.innerHTML = `
+        ${mensagem}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    document.body.appendChild(alerta);
+    setTimeout(() => bootstrap.Alert.getOrCreateInstance(alerta)?.close(), 6000);
+}
+
+function pararStreamDeVideo(stream = streamAtivo) {
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        if (stream === streamAtivo) {
+            streamAtivo = null;
+        }
+    }
+}
+
+// Função para carregar vídeos de teste
+async function carregarVideosTeste() {
+    try {
+        const response = await fetch('/api/test-videos');
+        if (!response.ok) {
+            throw new Error('Erro ao carregar vídeos de teste');
+        }
+        const data = await response.json();
+        return data.videos || [];
+    } catch (error) {
+        console.error('Erro ao carregar vídeos de teste:', error);
+        mostrarAlerta('Erro ao carregar vídeos de teste', 'danger');
+        return [];
+    }
+}
+
+// Função para atualizar a visualização das câmeras
+function atualizarVisualizacaoCameras() {
+    const container = document.getElementById('cameraContainer');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (multiCameraView && activeCameras.length > 0) {
+        // Modo grade para múltiplas câmeras
+        const row = document.createElement('div');
+        row.className = 'row g-2';
+        
+        activeCameras.forEach((camera, index) => {
+            const col = document.createElement('div');
+            col.className = 'col-md-6';
+            
+            const card = document.createElement('div');
+            card.className = 'card bg-dark border-secondary mb-2';
+            
+            const cardBody = document.createElement('div');
+            cardBody.className = 'card-body p-2';
+            
+            const title = document.createElement('h6');
+            title.className = 'card-title text-center small';
+            title.textContent = camera.name || `Câmera ${index + 1}`;
+            
+            const video = document.createElement('img');
+            video.id = `cameraFeed-${camera.id}`;
+            video.className = 'img-fluid rounded';
+            video.alt = `Feed da ${camera.name || `Câmera ${index + 1}`}`;
+            
+            cardBody.appendChild(title);
+            cardBody.appendChild(video);
+            card.appendChild(cardBody);
+            col.appendChild(card);
+            row.appendChild(col);
+        });
+        
+        container.appendChild(row);
+    } else if (activeCameras.length > 0) {
+        // Modo de visualização única
+        const video = document.createElement('img');
+        video.id = 'cameraFeed';
+        video.className = 'img-fluid';
+        video.alt = `Feed da ${activeCameras[0].name || 'Câmera'}`;
+        container.appendChild(video);
+    } else {
+        // Nenhuma câmera ativa
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-info';
+        alert.textContent = 'Nenhuma câmera ativa. Inicie o monitoramento para ver o feed.';
+        container.appendChild(alert);
+    }
+}
+
+// --- LÓGICA DE MONITORAMENTO ---
+function configurarMonitoramento() {
+    const cameraFeed = document.getElementById('cameraFeed');
+    const iniciarBtn = document.getElementById('iniciarMonitoramento');
+    const pararBtn = document.getElementById('pararMonitoramento');
+    
+    if (!iniciarBtn || !pararBtn) {
+        console.error('Botões de monitoramento não encontrados');
+        return;
+    }
+    
+    async function iniciarMonitoramento() {
+        try {
+            if (testMode) {
+                // No modo teste, carrega todos os vídeos disponíveis
+                testVideos = await carregarVideosTeste();
+                if (testVideos.length === 0) {
+                    mostrarAlerta('Nenhum vídeo de teste encontrado na pasta test_videos!', 'warning');
+                    return;
+                }
+                
+                // Para cada vídeo, inicia um monitoramento
+                for (let i = 0; i < testVideos.length; i++) {
+                    socket.emit('start_monitoring', { 
+                        camera_id: i, 
+                        test_mode: true 
+                    });
+                    
+                    // Adiciona a câmera à lista de ativas
+                    if (!activeCameras.some(cam => cam.id === i)) {
+                        activeCameras.push({ 
+                            id: i, 
+                            name: testVideos[i].name || `Vídeo ${i+1}` 
+                        });
+                    }
+                }
+            } else {
+                // Modo normal: usa câmera selecionada
+                const cameraId = document.getElementById('cameraSelect').value;
+                if (!cameraId) {
+                    mostrarAlerta('Selecione uma câmera primeiro!', 'warning');
+                    return;
+                }
+                
+                socket.emit('start_monitoring', { 
+                    camera_id: cameraId, 
+                    test_mode: false 
+                });
+                
+                // Adiciona a câmera à lista de ativas
+                if (!activeCameras.some(cam => cam.id === cameraId)) {
+                    activeCameras.push({ 
+                        id: cameraId, 
+                        name: `Câmera ${cameraId}` 
+                    });
+                }
+            }
+            
+            // Atualiza a interface
+            atualizarVisualizacaoCameras();
+            isMonitoring = true;
+            document.getElementById('btnIniciar').disabled = true;
+            document.getElementById('btnParar').disabled = false;
+        } catch (error) {
+            console.error('Erro ao iniciar monitoramento:', error);
+            mostrarAlerta(`Erro ao iniciar monitoramento: ${error.message}`, 'danger');
+        }
+    }
+    
+    function pararMonitoramento() {
+        try {
+            // Para todas as câmeras ativas
+            activeCameras.forEach(camera => {
+                socket.emit('stop_monitoring', { camera_id: camera.id });
+            });
+            
+            // Limpa a lista de câmeras ativas
+            activeCameras = [];
+            
+            // Atualiza a interface
+            atualizarVisualizacaoCameras();
+            isMonitoring = false;
+            document.getElementById('btnIniciar').disabled = false;
+            document.getElementById('btnParar').disabled = true;
+        } catch (error) {
+            console.error('Erro ao parar monitoramento:', error);
+            mostrarAlerta(`Erro ao parar monitoramento: ${error.message}`, 'danger');
+        }
+    }
+    
+    // Configura os eventos dos botões
+    iniciarBtn.addEventListener('click', iniciarMonitoramento);
+    pararBtn.addEventListener('click', pararMonitoramento);
+}
+
+// --- SOCKET.IO E EVENTOS GERAIS ---
+const logsContainer = document.getElementById('logs');
+
+// Configura os eventos do WebSocket
+socket.on('camera_frame', (data) => {
+    try {
+        const cameraId = data.camera_id;
+        
+        if (multiCameraView) {
+            // Modo multi-câmera: atualiza o frame específico
+            const feedElement = document.getElementById(`cameraFeed-${cameraId}`);
+            if (feedElement) {
+                feedElement.src = `data:image/jpeg;base64,${data.frame}`;
+            }
+        } else {
+            // Modo de visualização única: atualiza apenas se for a câmera ativa
+            if (activeCameras.length > 0 && activeCameras[0].id == cameraId) {
+                const feedElement = document.getElementById('cameraFeed');
+                if (feedElement) {
+                    feedElement.src = `data:image/jpeg;base64,${data.frame}`;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao processar frame:', error);
+    }
+});
+
+// Trata erros do servidor
+socket.on('error', (error) => {
+    console.error('Erro no servidor:', error);
+    mostrarAlerta(`Erro: ${error.message || 'Erro desconhecido'}`, 'danger');
+});
+
+// --- INICIALIZAÇÃO ---
+document.addEventListener('DOMContentLoaded', () => {
+    // Configura os controles de visualização
+    const testModeToggle = document.getElementById('testModeToggle');
+    const multiCameraToggle = document.getElementById('multiCameraView');
+    
+    if (testModeToggle) {
+        testModeToggle.addEventListener('change', (e) => {
+            testMode = e.target.checked;
+            // Se estiver monitorando, reinicia o monitoramento com o novo modo
+            if (isMonitoring) {
+                const btnIniciar = document.getElementById('iniciarMonitoramento');
+                const btnParar = document.getElementById('pararMonitoramento');
+                
+                if (btnParar && !btnParar.disabled) {
+                    // Simula o clique no botão de parar e depois no de iniciar
+                    btnParar.click();
+                    setTimeout(() => {
+                        btnIniciar.click();
+                    }, 500);
+                }
+            }
+        });
+    }
+    
+    if (multiCameraToggle) {
+        multiCameraToggle.addEventListener('change', (e) => {
+            multiCameraView = e.target.checked;
+            // Atualiza a visualização sem reiniciar o monitoramento
+            atualizarVisualizacaoCameras();
+        });
+    }
+    
+    // Inicializa o monitoramento
+    configurarMonitoramento();
+});
