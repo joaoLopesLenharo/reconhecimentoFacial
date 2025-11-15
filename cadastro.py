@@ -156,20 +156,41 @@ def cadastrar_aluno(id_aluno, nome, frame, resp_telefone=None, resp_email=None):
 def listar_alunos():
     conn = conectar_mysql()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute(
-        """
-        SELECT a.Id, a.Nome, a.codificacao_facial,
-               r.telefone AS resp_telefone, r.email AS resp_email
-        FROM alunos a
-        LEFT JOIN responsavel r ON r.id_aluno = a.Id
-        """
-    )
-    alunos = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    for aluno in alunos:
-        aluno['codificacao_facial'] = json.loads(aluno['codificacao_facial'])
-    return alunos
+    try:
+        cursor.execute(
+            """
+            SELECT a.Id, a.Nome, a.codificacao_facial,
+                   r.telefone AS resp_telefone, r.email AS resp_email
+            FROM alunos a
+            LEFT JOIN responsavel r ON r.id_aluno = a.Id
+            ORDER BY a.Id
+            """
+        )
+        alunos = cursor.fetchall()
+        
+        # Processa cada aluno, tratando possíveis erros na codificação facial
+        alunos_processados = []
+        for aluno in alunos:
+            try:
+                # Tenta fazer parse da codificação facial (pode falhar se estiver corrompida)
+                if aluno.get('codificacao_facial'):
+                    aluno['codificacao_facial'] = json.loads(aluno['codificacao_facial'])
+                alunos_processados.append(aluno)
+            except (json.JSONDecodeError, TypeError) as e:
+                # Se houver erro ao fazer parse, mantém o aluno mas loga o erro
+                print(f"[AVISO] Erro ao processar codificação facial do aluno {aluno.get('Id')}: {e}")
+                # Remove a codificação facial corrompida para evitar problemas
+                aluno['codificacao_facial'] = None
+                alunos_processados.append(aluno)
+        
+        print(f"[CADASTRO] Listados {len(alunos_processados)} aluno(s) do banco de dados")
+        return alunos_processados
+    except Exception as e:
+        print(f"[ERRO] Erro ao listar alunos: {e}")
+        raise
+    finally:
+        cursor.close()
+        conn.close()
 
 def editar_aluno(id_aluno, novo_nome, frame=None, resp_telefone=None, resp_email=None):
     if not novo_nome:

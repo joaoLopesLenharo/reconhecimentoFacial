@@ -209,7 +209,8 @@ def get_test_videos():
     video_names = [{
         'id': i,
         'name': os.path.basename(video),
-        'path': f'/test_videos/{os.path.basename(video)}'
+        'path': f'/test_videos/{os.path.basename(video)}',
+        'filename': os.path.basename(video)  # Adiciona o nome do arquivo para facilitar acesso
     } for i, video in enumerate(videos)]
     
     return jsonify({'videos': video_names})
@@ -224,6 +225,10 @@ def handle_start_monitoring(data):
     """Inicia o monitoramento de uma câmera"""
     camera_id = data.get('camera_id', 0)
     is_test_mode = data.get('test_mode', False)
+    video_filename = data.get('video_filename', None)  # Nome do arquivo de vídeo no modo teste
+    
+    # Captura o SID do cliente antes de iniciar a thread
+    client_sid = request.sid
     
     # Para qualquer monitoramento existente
     if 'monitor_thread' in camera_states.get(camera_id, {}):
@@ -236,10 +241,12 @@ def handle_start_monitoring(data):
         camera_states[camera_id] = {
             'running': True,
             'last_frame': None,
-            'last_update': datetime.now()
+            'last_update': datetime.now(),
+            'is_test_mode': is_test_mode
         }
     else:
         camera_states[camera_id]['running'] = True
+        camera_states[camera_id]['is_test_mode'] = is_test_mode
     
     # Inicia a thread de monitoramento
     def monitor_camera():
@@ -247,15 +254,37 @@ def handle_start_monitoring(data):
         try:
             if is_test_mode:
                 # Modo teste: usa vídeo do arquivo
-                video_path = os.path.join('test_videos', f'test_{camera_id}.mp4')
+                if video_filename:
+                    # Usa o nome do arquivo fornecido
+                    video_path = os.path.join('test_videos', video_filename)
+                else:
+                    # Tenta encontrar vídeo por índice
+                    videos = []
+                    for ext in ['*.mp4', '*.avi', '*.mov']:
+                        videos.extend([f for f in glob.glob(str(TEST_VIDEOS_DIR / ext))])
+                    
+                    if camera_id < len(videos):
+                        video_path = videos[camera_id]
+                    else:
+                        # Fallback: tenta padrão antigo
+                        video_path = os.path.join('test_videos', f'test_{camera_id}.mp4')
+                
                 if not os.path.exists(video_path):
-                    emit('error', {'message': f'Vídeo de teste não encontrado: {video_path}'})
+                    socketio.emit('error', {'message': f'Vídeo de teste não encontrado: {video_path}'}, room=client_sid)
                     return
+                
                 cap = cv2.VideoCapture(video_path)
+                if not cap.isOpened():
+                    socketio.emit('error', {'message': f'Não foi possível abrir o vídeo: {video_path}'}, room=client_sid)
+                    return
             else:
                 # Modo normal: usa câmera real
-                cap = cv2.VideoCapture(camera_id, cv2.CAP_DSHOW if os.name == 'nt' else cv2.CAP_ANY)
+                cap = cv2.VideoCapture(int(camera_id), cv2.CAP_DSHOW if os.name == 'nt' else cv2.CAP_ANY)
+                if not cap.isOpened():
+                    socketio.emit('error', {'message': f'Não foi possível abrir a câmera {camera_id}'}, room=client_sid)
+                    return
             
+            frame_count = 0
             while camera_states.get(camera_id, {}).get('running', False):
                 ret, frame = cap.read()
                 if not ret:
@@ -266,29 +295,40 @@ def handle_start_monitoring(data):
                     else:
                         break
                 
-                # Converte o frame para base64
-                _, buffer = cv2.imencode('.jpg', frame)
+                # Processa reconhecimento facial a cada 5 segundos (aproximadamente)
+                if frame_count % 150 == 0:  # ~5 segundos a 30 FPS
+                    # Coloca o frame na fila de processamento do reconhecimento
+                    if not reconhecimento.frame_queue.full():
+                        reconhecimento.frame_queue.put(frame.copy())
+                
+                # Converte o frame para base64 para exibição
+                _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
                 frame_base64 = base64.b64encode(buffer).decode('utf-8')
                 
                 # Atualiza o estado da câmera
                 camera_states[camera_id]['last_frame'] = frame_base64
                 camera_states[camera_id]['last_update'] = datetime.now()
                 
-                # Envia o frame via WebSocket
-                emit('camera_frame', {
+                # Envia o frame via WebSocket usando socketio.emit com room
+                socketio.emit('camera_frame', {
                     'camera_id': camera_id,
                     'frame': frame_base64,
                     'timestamp': datetime.now().isoformat()
-                })
+                }, room=client_sid)
                 
+                frame_count += 1
                 # Pequena pausa para não sobrecarregar
                 socketio.sleep(0.03)  # ~30 FPS
                 
         except Exception as e:
-            emit('error', {'message': f'Erro no monitoramento: {str(e)}'})
+            import traceback
+            error_msg = f'Erro no monitoramento: {str(e)}\n{traceback.format_exc()}'
+            print(f"[ERRO] {error_msg}")
+            socketio.emit('error', {'message': error_msg}, room=client_sid)
         finally:
             if cap and cap.isOpened():
                 cap.release()
+            camera_states[camera_id]['running'] = False
     
     # Inicia a thread de monitoramento
     camera_states[camera_id]['monitor_thread'] = socketio.start_background_task(monitor_camera)
@@ -301,8 +341,13 @@ def handle_stop_monitoring(data):
     camera_id = data.get('camera_id', 0)
     if camera_id in camera_states:
         camera_states[camera_id]['running'] = False
-        if 'monitor_thread' in camera_states[camera_id] and camera_states[camera_id]['monitor_thread'].is_alive():
-            camera_states[camera_id]['monitor_thread'].join()
+        if 'monitor_thread' in camera_states[camera_id]:
+            thread = camera_states[camera_id]['monitor_thread']
+            if thread.is_alive():
+                # Aguarda até 2 segundos para a thread terminar
+                thread.join(timeout=2.0)
+                if thread.is_alive():
+                    print(f"[AVISO] Thread da câmera {camera_id} não terminou a tempo")
         return {'status': 'stopped', 'camera_id': camera_id}
     return {'status': 'not_found', 'camera_id': camera_id}
 
@@ -346,19 +391,100 @@ def get_cameras():
         print(f"Erro ao listar câmeras: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/debug/alunos')
+def debug_alunos():
+    """Endpoint de debug para verificar alunos no banco"""
+    try:
+        from cadastro import listar_alunos
+        alunos = listar_alunos()
+        return jsonify({
+            'total': len(alunos),
+            'alunos': [
+                {
+                    'Id': a.get('Id'),
+                    'Nome': a.get('Nome'),
+                    'tem_responsavel': bool(a.get('resp_telefone') or a.get('resp_email'))
+                }
+                for a in alunos
+            ]
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'erro': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
 @app.route('/api/alunos')
 def get_alunos():
     try:
+        print("[API /api/alunos] Iniciando listagem de alunos...")
         alunos = listar_alunos()
-        for aluno in alunos:
-            aluno['_id'] = aluno['Id']
-            aluno['nome'] = aluno['Nome']
-            # Mapeia dados do responsável (podem ser None)
-            aluno['resp_telefone'] = aluno.get('resp_telefone')
-            aluno['resp_email'] = aluno.get('resp_email')
-        return jsonify({'success': True, 'alunos': alunos})
+        print(f"[API /api/alunos] Recebidos {len(alunos)} aluno(s) da função listar_alunos()")
+        
+        if not alunos or len(alunos) == 0:
+            print("[API /api/alunos] Nenhum aluno encontrado no banco de dados")
+            return jsonify({'success': True, 'alunos': []})
+        
+        alunos_serializados = []
+        
+        for idx, aluno in enumerate(alunos):
+            try:
+                # Garante que temos os dados básicos
+                aluno_id = aluno.get('Id') or aluno.get('id') or aluno.get('_id')
+                aluno_nome = aluno.get('Nome') or aluno.get('nome')
+                
+                if not aluno_id or not aluno_nome:
+                    print(f"[API /api/alunos] Aluno {idx} está incompleto: {aluno}")
+                    continue
+                
+                # Cria uma cópia do aluno sem a codificação facial (não precisa enviar para o frontend)
+                aluno_serializado = {
+                    'Id': aluno_id,
+                    '_id': aluno_id,
+                    'id': aluno_id,
+                    'Nome': aluno_nome,
+                    'nome': aluno_nome,
+                    'resp_telefone': aluno.get('resp_telefone') or None,
+                    'resp_email': aluno.get('resp_email') or None
+                }
+                alunos_serializados.append(aluno_serializado)
+                print(f"[API /api/alunos] Aluno {idx+1} processado: ID={aluno_id}, Nome={aluno_nome}")
+            except Exception as e:
+                print(f"[ERRO /api/alunos] Erro ao processar aluno {idx}: {e}")
+                import traceback
+                print(traceback.format_exc())
+                print(f"[ERRO /api/alunos] Dados do aluno problemático: {aluno}")
+                continue
+        
+        print(f"[API /api/alunos] Total de {len(alunos_serializados)} aluno(s) serializado(s) de {len(alunos)} recebido(s)")
+        
+        if len(alunos_serializados) == 0:
+            print("[API /api/alunos] AVISO: Nenhum aluno foi serializado com sucesso!")
+            return jsonify({'success': True, 'alunos': []})
+        
+        response_data = {'success': True, 'alunos': alunos_serializados}
+        
+        # Testa a serialização JSON antes de enviar
+        try:
+            import json as json_module
+            test_json = json_module.dumps(response_data, ensure_ascii=False)
+            print(f"[API /api/alunos] JSON de teste gerado com sucesso ({len(test_json)} caracteres)")
+        except Exception as json_error:
+            print(f"[ERRO /api/alunos] Erro ao testar serialização JSON: {json_error}")
+            import traceback
+            print(traceback.format_exc())
+        
+        response = jsonify(response_data)
+        response.headers['Content-Type'] = 'application/json; charset=utf-8'
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        print(f"[API /api/alunos] Resposta enviada com {len(alunos_serializados)} aluno(s)")
+        return response
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        import traceback
+        error_msg = f"Erro ao listar alunos: {str(e)}\n{traceback.format_exc()}"
+        print(f"[ERRO /api/alunos] {error_msg}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/alunos', methods=['POST'])
 def create_aluno():
@@ -438,10 +564,6 @@ def start_monitoring():
         camera_id = data.get('camera_id')
         test_mode = data.get('test_mode', False)
         
-        if test_mode:
-            # In test mode, just return success
-            return jsonify({'success': True, 'message': 'Modo de teste iniciado'})
-        
         # Convert camera_id to int if it's a string
         if camera_id is not None:
             try:
@@ -451,15 +573,31 @@ def start_monitoring():
         else:
             camera_id = 0
         
-        # Start real monitoring
-        reconhecimento.iniciar_monitoramento(camera_id)
-        return jsonify({'success': True, 'message': 'Monitoramento iniciado'})
+        # Inicia o reconhecimento facial se ainda não estiver ativo
+        # O reconhecimento processa frames de todas as câmeras através da fila
+        if not reconhecimento.monitoramento_ativo:
+            reconhecimento.iniciar_monitoramento(camera_id)
+        
+        if test_mode:
+            return jsonify({'success': True, 'message': 'Modo de teste iniciado'})
+        else:
+            return jsonify({'success': True, 'message': 'Monitoramento iniciado'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/monitoring/stop', methods=['POST'])
 def stop_monitoring():
     try:
+        # Para todas as câmeras ativas
+        for camera_id in list(camera_states.keys()):
+            if camera_states[camera_id].get('running', False):
+                camera_states[camera_id]['running'] = False
+                if 'monitor_thread' in camera_states[camera_id]:
+                    thread = camera_states[camera_id]['monitor_thread']
+                    if thread.is_alive():
+                        thread.join(timeout=2.0)
+        
+        # Para o reconhecimento facial
         reconhecimento.parar_monitoramento()
         return jsonify({'success': True, 'message': 'Monitoramento parado'})
     except Exception as e:

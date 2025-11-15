@@ -7,6 +7,53 @@ const FormValidation = (() => {
         setupStudentForm();
         setupEmailValidation();
         setupPhoneFormatting();
+        setupTestModeToggle();
+        setupFileInputHandler();
+    }
+    
+    // Setup file input handler for test mode
+    function setupFileInputHandler() {
+        const fileInput = document.getElementById('fileInputCadastro');
+        if (!fileInput) return;
+        
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                // Valida tipo de arquivo
+                if (!file.type.startsWith('image/')) {
+                    mostrarAlerta('Por favor, selecione um arquivo de imagem válido.', 'warning');
+                    fileInput.value = '';
+                    updateRegisterButtonState();
+                    return;
+                }
+                
+                // Valida tamanho (máximo 10MB)
+                if (file.size > 10 * 1024 * 1024) {
+                    mostrarAlerta('A imagem deve ter no máximo 10MB.', 'warning');
+                    fileInput.value = '';
+                    updateRegisterButtonState();
+                    return;
+                }
+                
+                // Mostra preview
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const photoPreview = document.getElementById('fotoPreview');
+                    const placeholder = document.getElementById('cameraPlaceholder');
+                    
+                    if (photoPreview) {
+                        photoPreview.src = event.target.result;
+                        photoPreview.style.display = 'block';
+                    }
+                    if (placeholder) placeholder.style.display = 'none';
+                    
+                    updateRegisterButtonState();
+                };
+                reader.readAsDataURL(file);
+            } else {
+                updateRegisterButtonState();
+            }
+        });
     }
     
     // Setup Bootstrap form validation
@@ -50,18 +97,22 @@ const FormValidation = (() => {
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Registrando...';
             
+            // Get photo data (async)
+            const frameData = await getPhotoData();
+            
             // Get form data
             const formData = {
                 id: parseInt(document.getElementById('idAluno').value),
                 nome: document.getElementById('nomeAluno').value.trim(),
                 resp_telefone: document.getElementById('respTelefone').value.trim() || null,
                 resp_email: document.getElementById('respEmail').value.trim() || null,
-                frame: getPhotoData()
+                frame: frameData
             };
             
             // Validate required fields
             if (!formData.id || !formData.nome || !formData.frame) {
-                throw new Error('Por favor, preencha todos os campos obrigatórios e capture uma foto.');
+                throw new Error('Por favor, preencha todos os campos obrigatórios e ' + 
+                    (document.getElementById('testModeCadastro')?.checked ? 'selecione uma imagem.' : 'capture uma foto.'));
             }
             
             // Submit to API
@@ -99,14 +150,32 @@ const FormValidation = (() => {
         }
     }
     
-    // Get photo data from camera preview
+    // Get photo data from camera preview or file input
     function getPhotoData() {
-        // This should integrate with the camera preview module
-        const photoElement = document.getElementById('fotoPreview');
-        if (photoElement && photoElement.src && photoElement.src.startsWith('data:')) {
-            return photoElement.src;
+        const testModeCadastro = document.getElementById('testModeCadastro');
+        const isTestMode = testModeCadastro && testModeCadastro.checked;
+        
+        if (isTestMode) {
+            // Modo teste: obtém do input de arquivo
+            const fileInput = document.getElementById('fileInputCadastro');
+            if (fileInput && fileInput.files && fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            }
+            return Promise.resolve(null);
+        } else {
+            // Modo normal: obtém da câmera
+            const photoElement = document.getElementById('fotoPreview');
+            if (photoElement && photoElement.src && photoElement.src.startsWith('data:')) {
+                return Promise.resolve(photoElement.src);
+            }
+            return Promise.resolve(null);
         }
-        return null;
     }
     
     // Reset photo capture
@@ -114,10 +183,12 @@ const FormValidation = (() => {
         const photoElement = document.getElementById('fotoPreview');
         const videoElement = document.getElementById('videoPreviewCadastro');
         const placeholder = document.getElementById('cameraPlaceholder');
+        const fileInput = document.getElementById('fileInputCadastro');
         
         if (photoElement) photoElement.style.display = 'none';
         if (videoElement) videoElement.style.display = 'none';
         if (placeholder) placeholder.style.display = 'flex';
+        if (fileInput) fileInput.value = '';
         
         // Reset buttons
         const btnAbrir = document.getElementById('btnAbrirCameraCadastro');
@@ -127,6 +198,91 @@ const FormValidation = (() => {
         if (btnAbrir) btnAbrir.style.display = 'block';
         if (btnTirar) btnTirar.style.display = 'none';
         if (btnRegistrar) btnRegistrar.disabled = true;
+    }
+    
+    // Setup test mode toggle for registration
+    function setupTestModeToggle() {
+        const testModeToggle = document.getElementById('testModeCadastro');
+        if (!testModeToggle) return;
+        
+        testModeToggle.addEventListener('change', (e) => {
+            const isTestMode = e.target.checked;
+            toggleRegistrationMode(isTestMode);
+        });
+    }
+    
+    // Toggle between camera and file input modes
+    function toggleRegistrationMode(isTestMode) {
+        const cameraSection = document.getElementById('cameraModeSection');
+        const fileSection = document.getElementById('fileModeSection');
+        const cameraButtons = document.getElementById('cameraModeButtons');
+        const cameraSelect = document.getElementById('cameraSelectCadastro');
+        const fileInput = document.getElementById('fileInputCadastro');
+        const photoPreview = document.getElementById('fotoPreview');
+        const videoPreview = document.getElementById('videoPreviewCadastro');
+        const placeholder = document.getElementById('cameraPlaceholder');
+        
+        if (isTestMode) {
+            // Mostra input de arquivo, esconde câmera
+            if (cameraSection) cameraSection.style.display = 'none';
+            if (fileSection) fileSection.style.display = 'block';
+            if (cameraButtons) cameraButtons.style.display = 'none';
+            if (cameraSelect) cameraSelect.removeAttribute('required');
+            if (fileInput) fileInput.setAttribute('required', 'required');
+            
+            // Limpa preview de câmera
+            if (videoPreview) {
+                const stream = videoPreview.srcObject;
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    videoPreview.srcObject = null;
+                }
+                videoPreview.style.display = 'none';
+            }
+            
+            // Mostra placeholder
+            if (placeholder) placeholder.style.display = 'flex';
+            if (photoPreview) photoPreview.style.display = 'none';
+            
+            // Reseta botões de câmera
+            const btnAbrir = document.getElementById('btnAbrirCameraCadastro');
+            const btnTirar = document.getElementById('btnTirarFotoCadastro');
+            const btnCancelar = document.getElementById('btnCancelarCadastro');
+            if (btnAbrir) btnAbrir.style.display = 'block';
+            if (btnTirar) btnTirar.style.display = 'none';
+            if (btnCancelar) btnCancelar.style.display = 'none';
+        } else {
+            // Mostra câmera, esconde input de arquivo
+            if (cameraSection) cameraSection.style.display = 'block';
+            if (fileSection) fileSection.style.display = 'none';
+            if (cameraButtons) cameraButtons.style.display = 'block';
+            if (cameraSelect) cameraSelect.setAttribute('required', 'required');
+            if (fileInput) fileInput.removeAttribute('required');
+            
+            // Limpa preview de arquivo
+            if (fileInput) fileInput.value = '';
+            if (photoPreview) photoPreview.style.display = 'none';
+        }
+        
+        // Atualiza estado do botão registrar
+        updateRegisterButtonState();
+    }
+    
+    // Update register button state based on current mode
+    function updateRegisterButtonState() {
+        const btnRegistrar = document.getElementById('btnRegistrar');
+        const testModeCadastro = document.getElementById('testModeCadastro');
+        const isTestMode = testModeCadastro && testModeCadastro.checked;
+        
+        if (!btnRegistrar) return;
+        
+        if (isTestMode) {
+            const fileInput = document.getElementById('fileInputCadastro');
+            btnRegistrar.disabled = !(fileInput && fileInput.files && fileInput.files.length > 0);
+        } else {
+            const photoElement = document.getElementById('fotoPreview');
+            btnRegistrar.disabled = !(photoElement && photoElement.src && photoElement.src.startsWith('data:'));
+        }
     }
     
     // Setup email validation
@@ -218,7 +374,8 @@ const FormValidation = (() => {
         init,
         validateEmail: isValidEmail,
         validateStudentId,
-        formatPhone
+        formatPhone,
+        updateRegisterButtonState
     };
 })();
 
@@ -226,3 +383,6 @@ const FormValidation = (() => {
 document.addEventListener('DOMContentLoaded', () => {
     FormValidation.init();
 });
+
+// Expose globally for other modules
+window.FormValidation = FormValidation;

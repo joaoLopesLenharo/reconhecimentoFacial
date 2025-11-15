@@ -123,19 +123,30 @@ const CameraPreview = (() => {
         // Update UI
         btnTirarFoto.style.display = 'none';
         if (btnConfirmar) btnConfirmar.style.display = 'block';
+        
+        // Atualiza o botão de registrar quando a foto é capturada
+        // (mesmo antes de confirmar, para melhor UX)
+        if (typeof FormValidation !== 'undefined' && FormValidation.updateRegisterButtonState) {
+            FormValidation.updateRegisterButtonState();
+        } else if (typeof window.FormValidation !== 'undefined' && window.FormValidation.updateRegisterButtonState) {
+            window.FormValidation.updateRegisterButtonState();
+        }
     }
     
     // Confirm the photo
     function confirmPhoto() {
         if (!photoData) return;
         
-        // Here you can handle the confirmed photo
-        // For example, save it to a hidden input field:
-        // document.getElementById('fotoAluno').value = photoData;
-        
         // Update UI
         btnConfirmar.style.display = 'none';
-        btnCancelar.textContent = 'Refazer Foto';
+        if (btnCancelar) btnCancelar.textContent = 'Refazer Foto';
+        
+        // Atualiza o botão de registrar se a função estiver disponível
+        if (typeof FormValidation !== 'undefined' && FormValidation.updateRegisterButtonState) {
+            FormValidation.updateRegisterButtonState();
+        } else if (typeof window.FormValidation !== 'undefined' && window.FormValidation.updateRegisterButtonState) {
+            window.FormValidation.updateRegisterButtonState();
+        }
     }
     
     // Stop the camera

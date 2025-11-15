@@ -385,6 +385,9 @@ const CameraSystem = (() => {
         socket.on('camera_frame', (data) => {
             updateCameraFrame(data);
         });
+        socket.on('log', (data) => {
+            handleLogMessage(data);
+        });
         
         // Listen for recognition events
         socket.on('student_detected', (data) => {
@@ -469,6 +472,31 @@ const CameraSystem = (() => {
         } catch (error) {
             console.error('Error updating camera frame:', error);
         }
+    }
+    function handleLogMessage(data) {
+        if (!data) return;
+        const mensagem = data.mensagem || data.message || '';
+        if (!mensagem) return;
+        const texto = mensagem.toString();
+        const alerta = texto.includes('ALERTA');
+        const erro = texto.toLowerCase().includes('erro');
+        let tipo = 'info';
+        if (erro) tipo = 'error';
+        else if (alerta) tipo = 'warning';
+        const match = texto.match(/^\[(\d{2}:\d{2}:\d{2})]\s*(.*)$/);
+        let mensagemLimpa = texto;
+        let detalhes = null;
+        if (match) {
+            mensagemLimpa = match[2] || texto;
+            detalhes = `Horário: ${match[1]}`;
+        }
+        if (alerta && typeof mostrarAlerta === 'function') {
+            mostrarAlerta(mensagemLimpa, 'warning');
+        }
+        if (erro && typeof mostrarAlerta === 'function') {
+            mostrarAlerta(mensagemLimpa, 'danger');
+        }
+        addToLogs(mensagemLimpa, tipo, detalhes);
     }
     
     // Handle unknown face detection

@@ -108,7 +108,13 @@
                     <div class="col-md-6">
                         <div class="card bg-dark border-secondary">
                             <div class="card-body">
-                                <h5 class="card-title">Cadastro de Aluno</h5>
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h5 class="card-title mb-0">Cadastro de Aluno</h5>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="testModeCadastro">
+                                        <label class="form-check-label" for="testModeCadastro">Modo Teste</label>
+                                    </div>
+                                </div>
                                 <form id="formCadastro" class="needs-validation" novalidate>
                                     <div class="mb-3">
                                         <label for="idAluno" class="form-label">
@@ -155,30 +161,52 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="mb-3">
+                                    
+                                    <!-- Modo Normal: Seleção de Câmera -->
+                                    <div id="cameraModeSection" class="mb-3">
                                         <label for="cameraSelectCadastro" class="form-label">
                                             Selecione a Câmera
                                             <i class="fas fa-info-circle ms-1" data-bs-toggle="tooltip" data-bs-placement="right" title="Câmera que será usada para capturar a foto do aluno"></i>
                                         </label>
                                         <div class="input-group mb-3">
                                             <span class="input-group-text bg-dark text-light border-secondary"><i class="fas fa-video"></i></span>
-                                            <select class="form-select bg-dark text-light border-secondary" id="cameraSelectCadastro" required>
+                                            <select class="form-select bg-dark text-light border-secondary" id="cameraSelectCadastro">
                                                 <option value="" selected disabled>Selecione uma câmera...</option>
                                             </select>
                                         </div>
                                     </div>
+                                    
+                                    <!-- Modo Teste: Upload de Arquivo -->
+                                    <div id="fileModeSection" class="mb-3" style="display: none;">
+                                        <label for="fileInputCadastro" class="form-label">
+                                            Selecionar Imagem
+                                            <i class="fas fa-info-circle ms-1" data-bs-toggle="tooltip" data-bs-placement="right" title="Selecione uma imagem do aluno para cadastro"></i>
+                                        </label>
+                                        <div class="input-group mb-3">
+                                            <span class="input-group-text bg-dark text-light border-secondary"><i class="fas fa-image"></i></span>
+                                            <input type="file" class="form-control bg-dark text-light border-secondary" id="fileInputCadastro" 
+                                                accept="image/*" title="Selecione uma imagem">
+                                        </div>
+                                        <div class="form-text text-muted">Formatos aceitos: JPG, PNG, GIF, WEBP</div>
+                                    </div>
+                                    
                                     <div class="d-grid gap-2">
-                                        <button type="button" class="btn btn-primary" id="btnAbrirCameraCadastro">
-                                            <i class="fas fa-camera"></i> Abrir Câmera
-                                        </button>
-                                        <button type="button" class="btn btn-info" id="btnTirarFotoCadastro" style="display: none;">
-                                            <i class="fas fa-check"></i> Tirar Foto
-                                        </button>
+                                        <!-- Botões Modo Normal -->
+                                        <div id="cameraModeButtons">
+                                            <button type="button" class="btn btn-primary" id="btnAbrirCameraCadastro">
+                                                <i class="fas fa-camera"></i> Abrir Câmera
+                                            </button>
+                                            <button type="button" class="btn btn-info" id="btnTirarFotoCadastro" style="display: none;">
+                                                <i class="fas fa-check"></i> Tirar Foto
+                                            </button>
+                                            <button type="button" class="btn btn-secondary" id="btnCancelarCadastro" style="display: none;">
+                                                <i class="fas fa-times"></i> Fechar Câmera/Descartar
+                                            </button>
+                                        </div>
+                                        
+                                        <!-- Botão Registrar (comum para ambos os modos) -->
                                         <button type="submit" class="btn btn-success" id="btnRegistrar" disabled>
                                             <i class="fas fa-save"></i> Registrar Aluno
-                                        </button>
-                                        <button type="button" class="btn btn-secondary" id="btnCancelarCadastro" style="display: none;">
-                                            <i class="fas fa-times"></i> Fechar Câmera/Descartar
                                         </button>
                                     </div>
                                 </form>
@@ -262,7 +290,7 @@
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h5 class="card-title mb-0">Alunos Cadastrados</h5>
-                            <button class="btn btn-primary" onclick="atualizarListaAlunos()">
+                            <button class="btn btn-primary" id="btnAtualizarListaAlunos">
                                 <i class="fas fa-sync"></i> Atualizar Lista
                             </button>
                         </div>
@@ -295,21 +323,6 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="card mb-4">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">Status do Serviço de E-mail</h5>
-                            <span id="emailStatus" class="badge bg-secondary">Verificando...</span>
-                        </div>
-                        <div class="card-body">
-                            <div class="alert alert-info">
-                                <i class="bi bi-info-circle me-2"></i>
-                                As configurações de e-mail são gerenciadas através do arquivo <code>email_config.json</code> no servidor.
-                            </div>
-                            <div id="emailConfigInfo" class="mt-3">
-                                <!-- As informações serão preenchidas via JavaScript -->
-                            </div>
-                        </div>
-                    </div>
                     <form id="formEditar">
                         <div class="mb-3">
                             <label for="editNome" class="form-label">Nome do Aluno</label>

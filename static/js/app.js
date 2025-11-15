@@ -1,5 +1,23 @@
 // static/js/app.js
 
+// --- FUNÇÕES AUXILIARES (definidas primeiro para garantir disponibilidade) ---
+function mostrarAlerta(mensagem, tipo = 'success') {
+    const alerta = document.createElement('div');
+    alerta.className = `alert alert-${tipo} alert-dismissible fade show alerta-persistente`;
+    alerta.innerHTML = `
+        ${mensagem}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    document.body.appendChild(alerta);
+    setTimeout(() => {
+        const bsAlert = bootstrap.Alert.getOrCreateInstance(alerta);
+        if (bsAlert) bsAlert.close();
+    }, 6000);
+}
+
+// Expor mostrarAlerta globalmente imediatamente
+window.mostrarAlerta = mostrarAlerta;
+
 // --- INICIALIZAÇÃO E VARIÁVEIS GLOBAIS ---
 console.log('Initializing WebSocket connection...');
 const socket = io();
@@ -63,31 +81,193 @@ function preencherCameras(cameras) {
 
 // Função para preencher a tabela de alunos
 function preencherTabelaAlunos(alunos) {
+    console.log('[preencherTabelaAlunos] Iniciando preenchimento da tabela...');
+    console.log('[preencherTabelaAlunos] Dados recebidos:', alunos);
+    console.log('[preencherTabelaAlunos] Tipo:', typeof alunos);
+    console.log('[preencherTabelaAlunos] É array?', Array.isArray(alunos));
+    console.log('[preencherTabelaAlunos] Tamanho:', alunos ? alunos.length : 'null/undefined');
+    
     const tbody = document.querySelector('#tabelaAlunos tbody');
-    if (!tbody) return;
+    if (!tbody) {
+        console.error('[preencherTabelaAlunos] ERRO: Elemento #tabelaAlunos tbody não encontrado!');
+        console.error('[preencherTabelaAlunos] Tentando encontrar elementos relacionados...');
+        const table = document.querySelector('#tabelaAlunos');
+        console.log('[preencherTabelaAlunos] Tabela encontrada?', !!table);
+        if (table) {
+            console.log('[preencherTabelaAlunos] HTML da tabela:', table.outerHTML.substring(0, 200));
+        }
+        return;
+    }
+    
+    console.log('[preencherTabelaAlunos] Tbody encontrado, limpando conteúdo...');
     
     // Limpa a tabela
     tbody.innerHTML = '';
     
-    // Adiciona cada aluno na tabela
-    alunos.forEach(aluno => {
+    if (!Array.isArray(alunos)) {
+        console.error('[preencherTabelaAlunos] ERRO: Dados recebidos não são um array:', typeof alunos, alunos);
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${aluno.Id}</td>
-            <td>${aluno.Nome}</td>
-            <td>${aluno.resp_email || 'Não informado'}</td>
-            <td>${aluno.resp_telefone || 'Não informado'}</td>
-            <td>
-                <button class="btn btn-sm btn-warning btn-editar" data-id="${aluno.Id}">
-                    <i class="fas fa-edit"></i> Editar
-                </button>
-                <button class="btn btn-sm btn-danger btn-excluir" data-id="${aluno.Id}">
-                    <i class="fas fa-trash"></i> Excluir
-                </button>
+            <td colspan="5" class="text-center text-danger">
+                Erro: Dados inválidos recebidos do servidor. Tipo: ${typeof alunos}
             </td>
         `;
         tbody.appendChild(tr);
+        return;
+    }
+    
+    if (alunos.length === 0) {
+        console.log('[preencherTabelaAlunos] Nenhum aluno encontrado no banco de dados');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td colspan="5" class="text-center text-muted">
+                Nenhum aluno cadastrado até o momento.
+            </td>
+        `;
+        tbody.appendChild(tr);
+        return;
+    }
+    
+    console.log(`[preencherTabelaAlunos] Processando ${alunos.length} aluno(s)...`);
+    
+    // Adiciona cada aluno na tabela
+    alunos.forEach((aluno, index) => {
+        try {
+            // Suporta tanto Id quanto _id, tanto Nome quanto nome
+            const alunoId = aluno.Id || aluno._id || aluno.id || 'N/A';
+            const alunoNome = aluno.Nome || aluno.nome || 'Sem nome';
+            const alunoTelefone = aluno.resp_telefone || aluno.telefone || null;
+            const alunoEmail = aluno.resp_email || aluno.email || null;
+            
+            console.log(`[preencherTabelaAlunos] Processando aluno ${index + 1}/${alunos.length}:`, {
+                id: alunoId,
+                nome: alunoNome,
+                telefone: alunoTelefone,
+                email: alunoEmail,
+                dadosCompletos: aluno
+            });
+            
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${alunoId}</td>
+                <td>${alunoNome}</td>
+                <td>${alunoTelefone || 'Não informado'}</td>
+                <td>${alunoEmail || 'Não informado'}</td>
+                <td>
+                    <button class="btn btn-sm btn-warning btn-editar" data-id="${alunoId}" data-nome="${alunoNome}" data-telefone="${alunoTelefone || ''}" data-email="${alunoEmail || ''}">
+                        <i class="fas fa-edit"></i> Editar
+                    </button>
+                    <button class="btn btn-sm btn-danger btn-excluir" data-id="${alunoId}" data-nome="${alunoNome}">
+                        <i class="fas fa-trash"></i> Excluir
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+            console.log(`[preencherTabelaAlunos] Aluno ${index + 1} adicionado à tabela`);
+        } catch (error) {
+            console.error(`[preencherTabelaAlunos] Erro ao processar aluno ${index + 1}:`, error);
+            console.error(`[preencherTabelaAlunos] Dados do aluno problemático:`, aluno);
+        }
     });
+    
+    console.log(`[preencherTabelaAlunos] Tabela preenchida com ${alunos.length} aluno(s)`);
+    console.log(`[preencherTabelaAlunos] Total de linhas na tabela agora: ${tbody.children.length}`);
+    
+    // Configura event listeners para os botões
+    configurarEventListenersTabela();
+    console.log('[preencherTabelaAlunos] Event listeners configurados');
+}
+
+// Função para configurar event listeners da tabela
+function configurarEventListenersTabela() {
+    // Event listeners para editar
+    document.querySelectorAll('.btn-editar').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const alunoId = btn.getAttribute('data-id');
+            const alunoNome = btn.getAttribute('data-nome');
+            const alunoTelefone = btn.getAttribute('data-telefone');
+            const alunoEmail = btn.getAttribute('data-email');
+            abrirModalEditar(alunoId, alunoNome, alunoTelefone, alunoEmail);
+        });
+    });
+    
+    // Event listeners para excluir
+    document.querySelectorAll('.btn-excluir').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const alunoId = btn.getAttribute('data-id');
+            const alunoNome = btn.getAttribute('data-nome');
+            if (confirm(`Tem certeza que deseja excluir o aluno "${alunoNome}" (ID: ${alunoId})?`)) {
+                await excluirAluno(alunoId);
+            }
+        });
+    });
+}
+
+// Função para abrir modal de edição
+function abrirModalEditar(id, nome, telefone, email) {
+    document.getElementById('editNome').value = nome || '';
+    document.getElementById('editRespTelefone').value = telefone || '';
+    document.getElementById('editRespEmail').value = email || '';
+    
+    // Armazena o ID do aluno no botão de salvar
+    const btnSalvar = document.getElementById('btnSalvarEdit');
+    btnSalvar.setAttribute('data-aluno-id', id);
+    
+    // Carrega câmeras disponíveis no select de edição
+    carregarCamerasParaEdicao();
+    
+    // Abre o modal
+    const modal = new bootstrap.Modal(document.getElementById('modalEditar'));
+    modal.show();
+}
+
+// Função para carregar câmeras no select de edição
+async function carregarCamerasParaEdicao() {
+    const select = document.getElementById('cameraSelectEdit');
+    if (!select) return;
+    
+    try {
+        const response = await fetch('/api/cameras');
+        const data = await response.json();
+        
+        select.innerHTML = '<option value="">Selecione uma câmera...</option>';
+        if (data.success && data.cameras) {
+            data.cameras.forEach(camera => {
+                const option = document.createElement('option');
+                option.value = camera.id;
+                option.textContent = camera.name;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Erro ao carregar câmeras para edição:', error);
+    }
+}
+
+// Função para excluir aluno
+async function excluirAluno(id) {
+    try {
+        const response = await fetch(`/api/alunos/${id}`, {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            mostrarAlerta('Aluno excluído com sucesso!', 'success');
+            await carregarAlunos();
+        } else {
+            throw new Error(result.error || 'Erro ao excluir aluno');
+        }
+    } catch (error) {
+        console.error('Erro ao excluir aluno:', error);
+        mostrarAlerta(`Erro ao excluir aluno: ${error.message}`, 'danger');
+    }
+}
+
+// Função para atualizar lista de alunos (exposta globalmente)
+async function atualizarListaAlunos() {
+    await carregarAlunos();
 }
 
 // Função para carregar dados iniciais
@@ -116,20 +296,91 @@ async function carregarDadosIniciais() {
             preencherCameras(camerasData.cameras);
         }
 
-        console.log('Carregando lista de alunos...');
-        const alunosResponse = await fetch('/api/alunos');
-        if (!alunosResponse.ok) throw new Error('Erro ao carregar lista de alunos');
-        const alunosData = await alunosResponse.json();
-        console.log('Alunos carregados:', alunosData);
-        
-        // Preenche a tabela de alunos
-        if (alunosData.success && alunosData.alunos) {
-            preencherTabelaAlunos(alunosData.alunos);
-        }
-        
+        await carregarAlunos();
     } catch (error) {
         console.error('Erro ao carregar dados iniciais:', error);
         mostrarAlerta(`Erro ao carregar dados: ${error.message}`, 'danger');
+    }
+}
+
+async function carregarAlunos() {
+    try {
+        console.log('[carregarAlunos] Iniciando carregamento...');
+        const response = await fetch('/api/alunos', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+            cache: 'no-cache'
+        });
+        
+        console.log('[carregarAlunos] Resposta HTTP:', response.status, response.statusText);
+        console.log('[carregarAlunos] Content-Type:', response.headers.get('Content-Type'));
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[carregarAlunos] Erro na resposta:', errorText);
+            throw new Error(`Erro ao carregar lista de alunos: ${response.status} ${response.statusText}`);
+        }
+        
+        const responseText = await response.text();
+        console.log('[carregarAlunos] Resposta texto bruto:', responseText.substring(0, 500));
+        
+        let data;
+        try {
+            data = JSON.parse(responseText);
+        } catch (parseError) {
+            console.error('[carregarAlunos] Erro ao fazer parse do JSON:', parseError);
+            console.error('[carregarAlunos] Texto recebido:', responseText);
+            throw new Error('Resposta do servidor não é um JSON válido');
+        }
+        
+        console.log('[carregarAlunos] Dados parseados:', data);
+        console.log('[carregarAlunos] Tipo de data:', typeof data);
+        console.log('[carregarAlunos] data.success:', data.success);
+        console.log('[carregarAlunos] data.alunos:', data.alunos);
+        console.log('[carregarAlunos] É array?', Array.isArray(data.alunos));
+        console.log('[carregarAlunos] Tipo de data.alunos:', typeof data.alunos);
+        
+        // Verifica se a resposta é válida
+        if (data === null || data === undefined) {
+            throw new Error('Resposta do servidor está vazia ou inválida');
+        }
+        
+        // Aceita tanto success === true quanto success === undefined (para compatibilidade)
+        if (data.success === true || (data.success === undefined && data.alunos !== undefined)) {
+            const alunosArray = data.alunos || [];
+            console.log(`[carregarAlunos] Encontrados ${alunosArray.length} aluno(s) no array`);
+            
+            if (Array.isArray(alunosArray)) {
+                if (alunosArray.length > 0) {
+                    console.log('[carregarAlunos] Primeiro aluno do array:', alunosArray[0]);
+                }
+                preencherTabelaAlunos(alunosArray);
+            } else {
+                console.error('[carregarAlunos] data.alunos não é um array:', alunosArray);
+                console.error('[carregarAlunos] Tipo:', typeof alunosArray);
+                throw new Error('Dados de alunos não estão no formato esperado (não é um array)');
+            }
+        } else {
+            console.error('[carregarAlunos] Resposta inválida:', {
+                success: data.success,
+                alunos: data.alunos,
+                error: data.error,
+                dadosCompletos: data
+            });
+            throw new Error(data.error || 'Resposta inválida ao carregar alunos');
+        }
+    } catch (error) {
+        console.error('[carregarAlunos] Erro ao carregar alunos:', error);
+        console.error('[carregarAlunos] Stack trace:', error.stack);
+        if (typeof mostrarAlerta === 'function') {
+            mostrarAlerta(`Erro ao carregar alunos: ${error.message}`, 'danger');
+        } else {
+            alert(`Erro ao carregar alunos: ${error.message}`);
+        }
+        preencherTabelaAlunos([]);
     }
 }
 
@@ -155,9 +406,63 @@ document.addEventListener('DOMContentLoaded', () => {
         }, false);
     });
     
+    // Configura listener para carregar alunos quando a aba de listagem for aberta
+    const listaTab = document.getElementById('lista-tab');
+    const listaPane = document.getElementById('lista');
+    const myTab = document.getElementById('myTab');
+    
+    if (listaTab && listaPane) {
+        console.log('[DOMContentLoaded] Configurando listeners para aba de listagem...');
+        
+        // Listener usando evento Bootstrap
+        listaTab.addEventListener('shown.bs.tab', (e) => {
+            console.log('[EVENT] Aba de listagem aberta (shown.bs.tab)');
+            carregarAlunos();
+        });
+        
+        // Listener usando evento do tab-pane
+        listaPane.addEventListener('shown.bs.tab', (e) => {
+            console.log('[EVENT] Tab-pane de listagem mostrado (shown.bs.tab)');
+            carregarAlunos();
+        });
+        
+        // Listener no container pai para capturar todos os eventos de tab
+        if (myTab) {
+            myTab.addEventListener('shown.bs.tab', (e) => {
+                const targetId = e.target.getAttribute('data-bs-target');
+                if (targetId === '#lista') {
+                    console.log('[EVENT] Aba de listagem detectada via container pai');
+                    carregarAlunos();
+                }
+            });
+        }
+        
+        // Fallback: escuta o evento 'click' diretamente
+        listaTab.addEventListener('click', () => {
+            console.log('[EVENT] Clique na aba de listagem detectado');
+            setTimeout(() => {
+                if (listaPane.classList.contains('active') && listaPane.classList.contains('show')) {
+                    console.log('[EVENT] Aba de listagem está ativa após clique (fallback)');
+                    carregarAlunos();
+                }
+            }, 150);
+        });
+    } else {
+        console.error('[DOMContentLoaded] ERRO: Elementos da aba de listagem não encontrados!');
+        console.error('[DOMContentLoaded] listaTab:', !!listaTab, 'listaPane:', !!listaPane);
+    }
+    
+    // Carrega alunos se a aba de listagem já estiver ativa ao carregar a página
+    if (listaPane && listaPane.classList.contains('active') && listaPane.classList.contains('show')) {
+        console.log('[DOMContentLoaded] Aba de listagem já está ativa ao carregar, carregando alunos...');
+        setTimeout(() => carregarAlunos(), 500); // Pequeno delay para garantir que tudo está pronto
+    }
+    
     // Inicia carregamento dos dados
     carregarDadosIniciais();
 });
+
+// mostrarAlerta já está definida no topo do arquivo
 
 // Atualiza um frame de forma segura com tratamento de erros
 function updateFrameSafely(element, frameData, cameraId) {
@@ -202,16 +507,7 @@ function updateFrameSafely(element, frameData, cameraId) {
 }
 
 // --- FUNÇÕES AUXILIARES ---
-function mostrarAlerta(mensagem, tipo = 'success') {
-    const alerta = document.createElement('div');
-    alerta.className = `alert alert-${tipo} alert-dismissible fade show alerta-persistente`;
-    alerta.innerHTML = `
-        ${mensagem}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    `;
-    document.body.appendChild(alerta);
-    setTimeout(() => bootstrap.Alert.getOrCreateInstance(alerta)?.close(), 6000);
-}
+// mostrarAlerta já está definida acima, não duplicar
 
 function pararStreamDeVideo(stream = streamAtivo) {
     if (stream) {
@@ -368,6 +664,9 @@ function configurarMonitoramento() {
                 testVideos = await carregarVideosTeste();
                 if (testVideos.length === 0) {
                     mostrarAlerta('Nenhum vídeo de teste encontrado na pasta test_videos!', 'warning');
+                    limparCameraTimeout();
+                    iniciarBtn.disabled = false;
+                    iniciarBtn.innerHTML = '<i class="fas fa-play"></i> Iniciar Monitoramento';
                     return;
                 }
                 
@@ -375,7 +674,8 @@ function configurarMonitoramento() {
                 for (let i = 0; i < testVideos.length; i++) {
                     socket.emit('start_monitoring', { 
                         camera_id: i, 
-                        test_mode: true 
+                        test_mode: true,
+                        video_filename: testVideos[i].filename || testVideos[i].name
                     });
                     
                     // Adiciona a câmera à lista de ativas
@@ -489,6 +789,7 @@ socket.on('camera_error', (error) => {
     
     limparCameraTimeout();
 });
+} // Fecha if (typeof window.CameraSystem === 'undefined')
 
 // --- SOCKET.IO E EVENTOS GERAIS ---
 const logsContainer = document.getElementById('logs');
@@ -610,7 +911,170 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         configurarMonitoramento();
     }
-});
 
-// Expose socket globally
+    // Configura botão de atualizar lista de alunos
+    const btnAtualizarAlunos = document.getElementById('btnAtualizarListaAlunos');
+    if (btnAtualizarAlunos) {
+        console.log('[DOMContentLoaded 2] Configurando listener para botão Atualizar Lista...');
+        btnAtualizarAlunos.addEventListener('click', async (e) => {
+            e.preventDefault();
+            console.log('[EVENT] Botão Atualizar Lista clicado');
+            btnAtualizarAlunos.disabled = true;
+            btnAtualizarAlunos.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Atualizando...';
+            try {
+                await carregarAlunos();
+            } catch (error) {
+                console.error('[EVENT] Erro ao atualizar lista:', error);
+            } finally {
+                btnAtualizarAlunos.disabled = false;
+                btnAtualizarAlunos.innerHTML = '<i class="fas fa-sync"></i> Atualizar Lista';
+            }
+        });
+    } else {
+        console.error('[DOMContentLoaded 2] ERRO: Botão btnAtualizarListaAlunos não encontrado!');
+    }
+    
+    // Configura event listener para salvar edição
+    const btnSalvarEdit = document.getElementById('btnSalvarEdit');
+    if (btnSalvarEdit) {
+        btnSalvarEdit.addEventListener('click', async () => {
+            await salvarEdicaoAluno();
+        });
+    }
+    
+    // Configura event listeners para câmera de edição
+    const btnAbrirCameraEdit = document.getElementById('btnAbrirCameraEdit');
+    const btnTirarFotoEdit = document.getElementById('btnTirarFotoEdit');
+    const videoPreviewEdit = document.getElementById('videoPreviewEdit');
+    const fotoPreviewEdit = document.getElementById('fotoPreviewEdit');
+    
+    let streamEdit = null;
+    let fotoEditData = null;
+    
+    if (btnAbrirCameraEdit) {
+        btnAbrirCameraEdit.addEventListener('click', async () => {
+            try {
+                streamEdit = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                if (videoPreviewEdit) {
+                    videoPreviewEdit.srcObject = streamEdit;
+                    videoPreviewEdit.style.display = 'block';
+                    videoPreviewEdit.play();
+                }
+                btnAbrirCameraEdit.style.display = 'none';
+                btnTirarFotoEdit.style.display = 'block';
+            } catch (error) {
+                console.error('Erro ao abrir câmera:', error);
+                mostrarAlerta('Erro ao acessar a câmera', 'danger');
+            }
+        });
+    }
+    
+    if (btnTirarFotoEdit) {
+        btnTirarFotoEdit.addEventListener('click', () => {
+            if (videoPreviewEdit && videoPreviewEdit.readyState === videoPreviewEdit.HAVE_ENOUGH_DATA) {
+                const canvas = document.createElement('canvas');
+                canvas.width = videoPreviewEdit.videoWidth;
+                canvas.height = videoPreviewEdit.videoHeight;
+                canvas.getContext('2d').drawImage(videoPreviewEdit, 0, 0);
+                fotoEditData = canvas.toDataURL('image/jpeg');
+                
+                if (fotoPreviewEdit) {
+                    fotoPreviewEdit.src = fotoEditData;
+                    fotoPreviewEdit.style.display = 'block';
+                }
+                if (videoPreviewEdit) videoPreviewEdit.style.display = 'none';
+                
+                if (streamEdit) {
+                    streamEdit.getTracks().forEach(track => track.stop());
+                    streamEdit = null;
+                }
+                
+                btnTirarFotoEdit.style.display = 'none';
+                btnAbrirCameraEdit.textContent = 'Refazer Foto';
+                btnAbrirCameraEdit.style.display = 'block';
+            }
+        });
+    }
+    
+    // Limpa stream ao fechar modal
+    const modalEditar = document.getElementById('modalEditar');
+    if (modalEditar) {
+        modalEditar.addEventListener('hidden.bs.modal', () => {
+            if (streamEdit) {
+                streamEdit.getTracks().forEach(track => track.stop());
+                streamEdit = null;
+            }
+            fotoEditData = null;
+            if (videoPreviewEdit) videoPreviewEdit.style.display = 'none';
+            if (fotoPreviewEdit) fotoPreviewEdit.style.display = 'none';
+            btnAbrirCameraEdit.textContent = 'Abrir Câmera para Nova Foto';
+        });
+    }
+}); // Fecha DOMContentLoaded
+
+// Função para salvar edição do aluno
+async function salvarEdicaoAluno() {
+    const btnSalvar = document.getElementById('btnSalvarEdit');
+    const alunoId = btnSalvar.getAttribute('data-aluno-id');
+    
+    if (!alunoId) {
+        mostrarAlerta('Erro: ID do aluno não encontrado', 'danger');
+        return;
+    }
+    
+    const nome = document.getElementById('editNome').value.trim();
+    if (!nome) {
+        mostrarAlerta('O nome do aluno é obrigatório', 'warning');
+        return;
+    }
+    
+    const telefone = document.getElementById('editRespTelefone').value.trim() || null;
+    const email = document.getElementById('editRespEmail').value.trim() || null;
+    
+    // Obtém foto se foi capturada
+    const fotoPreviewEdit = document.getElementById('fotoPreviewEdit');
+    let frameBase64 = null;
+    if (fotoPreviewEdit && fotoPreviewEdit.style.display !== 'none' && fotoPreviewEdit.src) {
+        frameBase64 = fotoPreviewEdit.src;
+    }
+    
+    try {
+        btnSalvar.disabled = true;
+        btnSalvar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Salvando...';
+        
+        const response = await fetch(`/api/alunos/${alunoId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                nome: nome,
+                resp_telefone: telefone,
+                resp_email: email,
+                frame: frameBase64
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            mostrarAlerta('Aluno atualizado com sucesso!', 'success');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalEditar'));
+            modal.hide();
+            await carregarAlunos();
+        } else {
+            throw new Error(result.error || 'Erro ao atualizar aluno');
+        }
+    } catch (error) {
+        console.error('Erro ao salvar edição:', error);
+        mostrarAlerta(`Erro ao salvar edição: ${error.message}`, 'danger');
+    } finally {
+        btnSalvar.disabled = false;
+        btnSalvar.innerHTML = 'Salvar Alterações';
+    }
+}
+
+// Expose socket and functions globally
 window.socket = socket;
+window.carregarAlunos = carregarAlunos;
+window.atualizarListaAlunos = atualizarListaAlunos;
