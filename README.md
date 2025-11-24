@@ -12,17 +12,22 @@
 ## ✨ Funcionalidades Principais
 
 - **Monitoramento em Tempo Real**  
-  Acompanhe o feed de vídeo da câmera e receba logs de presença e ausência a cada 30 segundos.  
-- **Cadastro de Alunos via Webcam**  
-  Captura de foto diretamente no navegador para registrar novos perfis faciais.  
+  Acompanhe o feed de vídeo da câmera e receba logs de presença e ausência a cada 30 segundos. Suporte para múltiplas câmeras simultâneas.  
+- **Cadastro de Alunos**  
+  - **Modo Normal**: Captura de foto diretamente no navegador via webcam para registrar novos perfis faciais.
+  - **Modo Teste**: Upload de arquivo de imagem para cadastro sem necessidade de câmera física.
 - **Seleção de Câmera**  
   Escolha qual dispositivo de vídeo usar tanto no monitoramento quanto no cadastro.  
 - **Gerenciamento de Alunos**  
-  Interface para listar, editar (nome/foto) e excluir alunos cadastrados.  
+  Interface completa para listar, editar (nome/foto/responsável) e excluir alunos cadastrados. Atualização automática da lista ao abrir a aba.  
+- **Modo Teste com Vídeos**  
+  Teste o sistema usando arquivos de vídeo ao invés de câmeras reais. Suporte para múltiplos vídeos simultâneos.  
 - **Interface Web Moderna**  
-  Layout responsivo e interativo com atualizações em tempo real via Socket.IO.  
+  Layout responsivo e interativo com atualizações em tempo real via Socket.IO. Tema escuro otimizado para melhor legibilidade.  
 - **Persistência em MySQL**  
-  Todas as informações e encodings faciais são armazenados em banco de dados relacional.
+  Todas as informações e encodings faciais são armazenados em banco de dados relacional.  
+- **Notificações por E-mail**  
+  Sistema integrado de envio de e-mails para alertas e notificações aos responsáveis.
   
 ### 🛠️ Pilha Técnica
 - **Backend**: Python (Flask + Flask-SocketIO)
@@ -487,6 +492,30 @@ As funções do módulo `cadastro.py` implementam validações mais robustas:
   - Se `frame` for informado, as mesmas validações de imagem acima são aplicadas; se nenhum rosto for detectado, é lançado `RuntimeError`.
 
 Essas regras previnem erros de OpenCV e melhoram a coerência dos retornos.
+
+### Modo Teste
+
+O sistema inclui um modo de teste completo que permite:
+
+- **Cadastro**: Use arquivos de imagem ao invés de câmera física
+- **Monitoramento**: Use arquivos de vídeo (MP4, AVI, MOV) ao invés de câmeras reais
+- **Múltiplas Câmeras**: Teste com vários vídeos simultaneamente
+
+Para usar o modo teste:
+1. Coloque os vídeos de teste na pasta `test_videos/`
+2. Ative o toggle "Modo Teste" na interface
+3. Selecione o vídeo desejado para cada câmera
+
+### Melhorias Recentes
+
+- ✅ Correção de bugs na listagem de alunos
+- ✅ Modo teste para cadastro com upload de arquivo
+- ✅ Suporte para múltiplas câmeras simultâneas
+- ✅ Interface melhorada com tema escuro otimizado
+- ✅ Logs de debug extensivos para troubleshooting
+- ✅ Tratamento robusto de erros em todas as camadas
+- ✅ Validação de dados do responsável (telefone e e-mail)
+- ✅ Atualização automática da lista de alunos ao abrir a aba
 
 ## 📂 Estrutura do Projeto
 
@@ -1032,17 +1061,22 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## ✨ Funcionalidades Principais
 
 - **Monitoramento em Tempo Real**  
-  Acompanhe o feed de vídeo da câmera e receba logs de presença e ausência a cada 30 segundos.  
-- **Cadastro de Alunos via Webcam**  
-  Captura de foto diretamente no navegador para registrar novos perfis faciais.  
+  Acompanhe o feed de vídeo da câmera e receba logs de presença e ausência a cada 30 segundos. Suporte para múltiplas câmeras simultâneas.  
+- **Cadastro de Alunos**  
+  - **Modo Normal**: Captura de foto diretamente no navegador via webcam para registrar novos perfis faciais.
+  - **Modo Teste**: Upload de arquivo de imagem para cadastro sem necessidade de câmera física.
 - **Seleção de Câmera**  
   Escolha qual dispositivo de vídeo usar tanto no monitoramento quanto no cadastro.  
 - **Gerenciamento de Alunos**  
-  Interface para listar, editar (nome/foto) e excluir alunos cadastrados.  
+  Interface completa para listar, editar (nome/foto/responsável) e excluir alunos cadastrados. Atualização automática da lista ao abrir a aba.  
+- **Modo Teste com Vídeos**  
+  Teste o sistema usando arquivos de vídeo ao invés de câmeras reais. Suporte para múltiplos vídeos simultâneos.  
 - **Interface Web Moderna**  
-  Layout responsivo e interativo com atualizações em tempo real via Socket.IO.  
+  Layout responsivo e interativo com atualizações em tempo real via Socket.IO. Tema escuro otimizado para melhor legibilidade.  
 - **Persistência em MySQL**  
   Todas as informações e encodings faciais são armazenados em banco de dados relacional.  
+- **Notificações por E-mail**  
+  Sistema integrado de envio de e-mails para alertas e notificações aos responsáveis.  
 
 ---
 
@@ -1713,15 +1747,21 @@ http://localhost:5000
 ├── bd.sql                   # Database initialization script / Script de criação do banco de dados
 ├── .env.example             # Example environment variables / Exemplo de variáveis de ambiente
 ├── .smtp_config.json        # SMTP configuration file / Arquivo de configuração SMTP
+├── test_videos/             # Test videos directory / Diretório de vídeos de teste
 ├── templates/               # HTML templates / Modelos HTML
 │   └── index.html           # Main page / Página principal
 └── static/                  # Static files / Arquivos estáticos
     ├── css/
-    │   └── style.css        # Additional styles / Estilos adicionais
+    │   ├── main.css         # Main styles (dark theme) / Estilos principais (tema escuro)
+    │   ├── camera.css       # Camera view styles / Estilos para visualização de câmeras
+    │   ├── camera-preview.css  # Camera preview styles / Estilos para preview de câmera
+    │   └── forms.css        # Form styles / Estilos para formulários
     └── js/
         ├── app.js           # Front-end logic / Lógica front-end
-        ├── email-config.js  # Email configuration interface / Interface de configuração de e-mail
-        └── email-status.js  # Email status management / Gerenciamento de status de e-mail
+        ├── camera-system.js # Camera management system / Sistema de gerenciamento de câmeras
+        ├── camera-preview.js # Camera preview for registration / Preview de câmera para cadastro
+        ├── form-validation.js # Form validation / Validação de formulários
+        └── error-handler.js  # Error handling / Tratamento de erros
 ```
 
 ## 📧 Email Configuration / Configuração de E-mail
@@ -1815,20 +1855,29 @@ Contribuições são bem-vindas! Sinta-se à vontade para enviar um Pull Request
 ## 📖 Como Usar
 
 1. **Aba de Monitoramento**  
-   - Selecione a câmera  
-   - Clique em “Iniciar Monitoramento”  
+   - Selecione a câmera ou ative o modo teste para usar vídeos
+   - Clique em "Iniciar Monitoramento"  
    - Veja o feed e acompanhe logs a cada 30s  
+   - Suporte para visualização de múltiplas câmeras simultaneamente
 
 2. **Aba de Cadastro Rápido**  
-   - Selecione a câmera  
-   - Clique em “Abrir Câmera” e permita acesso  
-   - Clique em “Tirar Foto” e posicione o rosto  
-   - Preencha **ID** e **Nome**  
-   - Clique em “Registrar Aluno”  
+   - **Modo Normal**:
+     - Selecione a câmera  
+     - Clique em "Abrir Câmera" e permita acesso  
+     - Clique em "Tirar Foto" e posicione o rosto  
+     - Preencha **ID**, **Nome** e dados do responsável (opcional)
+     - Clique em "Registrar Aluno"
+   - **Modo Teste**:
+     - Ative o toggle "Modo Teste"
+     - Selecione um arquivo de imagem (JPG, PNG, GIF, WEBP)
+     - Preencha **ID**, **Nome** e dados do responsável (opcional)
+     - Clique em "Registrar Aluno"
 
 3. **Aba de Listagem de Alunos**  
-   - Visualize todos os cadastros  
-   - Edite nome/foto ou exclua um perfil  
+   - Visualize todos os cadastros (carregamento automático ao abrir a aba)
+   - Use o botão "Atualizar Lista" para recarregar os dados
+   - Edite nome/foto/responsável ou exclua um perfil
+   - Visualize informações de contato do responsável (telefone e e-mail)  
 
 ---
 
