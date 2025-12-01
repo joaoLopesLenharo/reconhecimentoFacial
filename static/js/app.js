@@ -56,26 +56,38 @@ let emailConfig = {
 
 // Função para preencher o dropdown de câmeras
 function preencherCameras(cameras) {
-    const select = document.getElementById('cameraSelect');
-    if (!select) return;
+    // Lista de todos os selects de câmera que devem ser preenchidos
+    const cameraSelects = [
+        'cameraSelect',           // Monitoramento
+        'cameraSelectCadastro',   // Cadastro rápido
+        'cameraSelectEdit'         // Edição (será preenchido quando necessário, mas incluído aqui para consistência)
+    ];
     
-    // Limpa opções existentes
-    select.innerHTML = '';
-    
-    // Adiciona opção padrão
-    const defaultOption = document.createElement('option');
-    defaultOption.value = '';
-    defaultOption.textContent = 'Selecione uma câmera';
-    defaultOption.disabled = true;
-    defaultOption.selected = true;
-    select.appendChild(defaultOption);
-    
-    // Adiciona as câmeras disponíveis
-    cameras.forEach(camera => {
-        const option = document.createElement('option');
-        option.value = camera.id;
-        option.textContent = camera.name;
-        select.appendChild(option);
+    // Preenche cada select de câmera
+    cameraSelects.forEach(selectId => {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+        
+        // Limpa opções existentes
+        select.innerHTML = '';
+        
+        // Adiciona opção padrão
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = selectId === 'cameraSelectCadastro' 
+            ? 'Selecione uma câmera...' 
+            : 'Selecione uma câmera';
+        defaultOption.disabled = true;
+        defaultOption.selected = true;
+        select.appendChild(defaultOption);
+        
+        // Adiciona as câmeras disponíveis
+        cameras.forEach(camera => {
+            const option = document.createElement('option');
+            option.value = camera.id;
+            option.textContent = camera.name;
+            select.appendChild(option);
+        });
     });
 }
 
@@ -291,9 +303,11 @@ async function carregarDadosIniciais() {
         const camerasData = await camerasResponse.json();
         console.log('Câmeras disponíveis:', camerasData);
         
-        // Preenche o dropdown de câmeras
+        // Preenche TODOS os dropdowns de câmeras (monitoramento, cadastro, edição)
         if (camerasData.success && camerasData.cameras) {
             preencherCameras(camerasData.cameras);
+        } else {
+            console.warn('Nenhuma câmera disponível ou erro ao carregar câmeras');
         }
 
         await carregarAlunos();
@@ -433,6 +447,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (targetId === '#lista') {
                     console.log('[EVENT] Aba de listagem detectada via container pai');
                     carregarAlunos();
+                } else if (targetId === '#cadastro') {
+                    // Garante que as câmeras estejam carregadas na aba de cadastro
+                    console.log('[EVENT] Aba de cadastro detectada via container pai');
+                    const cameraSelectCadastro = document.getElementById('cameraSelectCadastro');
+                    if (cameraSelectCadastro && cameraSelectCadastro.options.length <= 1) {
+                        // Se o select de cadastro não tem câmeras, recarrega
+                        fetch('/api/cameras')
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success && data.cameras) {
+                                    preencherCameras(data.cameras);
+                                }
+                            })
+                            .catch(error => console.error('Erro ao carregar câmeras para cadastro:', error));
+                    }
                 }
             });
         }
@@ -450,6 +479,26 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         console.error('[DOMContentLoaded] ERRO: Elementos da aba de listagem não encontrados!');
         console.error('[DOMContentLoaded] listaTab:', !!listaTab, 'listaPane:', !!listaPane);
+    }
+    
+    // Configura listener para garantir câmeras na aba de cadastro
+    const cadastroTab = document.getElementById('cadastro-tab');
+    const cadastroPane = document.getElementById('cadastro');
+    if (cadastroTab && cadastroPane) {
+        cadastroTab.addEventListener('shown.bs.tab', () => {
+            const cameraSelectCadastro = document.getElementById('cameraSelectCadastro');
+            if (cameraSelectCadastro && cameraSelectCadastro.options.length <= 1) {
+                // Se o select de cadastro não tem câmeras, recarrega
+                fetch('/api/cameras')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.cameras) {
+                            preencherCameras(data.cameras);
+                        }
+                    })
+                    .catch(error => console.error('Erro ao carregar câmeras para cadastro:', error));
+            }
+        });
     }
     
     // Carrega alunos se a aba de listagem já estiver ativa ao carregar a página

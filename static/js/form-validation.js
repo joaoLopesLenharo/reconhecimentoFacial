@@ -9,6 +9,66 @@ const FormValidation = (() => {
         setupPhoneFormatting();
         setupTestModeToggle();
         setupFileInputHandler();
+        setupCameraButtons();
+    }
+    
+    // Setup camera buttons to sync with CameraPreview
+    function setupCameraButtons() {
+        const btnAbrirCameraCadastro = document.getElementById('btnAbrirCameraCadastro');
+        const btnTirarFotoCadastro = document.getElementById('btnTirarFotoCadastro');
+        const btnCancelarCadastro = document.getElementById('btnCancelarCadastro');
+        
+        // Sincroniza btnAbrirCameraCadastro com btnAbrirCameraPreview
+        if (btnAbrirCameraCadastro) {
+            btnAbrirCameraCadastro.addEventListener('click', () => {
+                const btnPreview = document.getElementById('btnAbrirCameraPreview');
+                if (btnPreview) {
+                    btnPreview.click();
+                    // Atualiza visibilidade dos botões do formulário após um pequeno delay
+                    setTimeout(() => {
+                        const btnTirarPreview = document.getElementById('btnTirarFotoPreview');
+                        const btnCancelarPreview = document.getElementById('btnCancelarCamera');
+                        if (btnTirarPreview && btnTirarPreview.style.display !== 'none') {
+                            btnAbrirCameraCadastro.style.display = 'none';
+                            if (btnTirarFotoCadastro) btnTirarFotoCadastro.style.display = 'block';
+                            if (btnCancelarCadastro) btnCancelarCadastro.style.display = 'block';
+                        }
+                    }, 100);
+                }
+            });
+        }
+        
+        // Sincroniza btnTirarFotoCadastro com btnTirarFotoPreview
+        if (btnTirarFotoCadastro) {
+            btnTirarFotoCadastro.addEventListener('click', () => {
+                const btnPreview = document.getElementById('btnTirarFotoPreview');
+                if (btnPreview) {
+                    btnPreview.click();
+                }
+            });
+        }
+        
+        // Sincroniza btnCancelarCadastro com btnCancelarCamera
+        if (btnCancelarCadastro) {
+            btnCancelarCadastro.addEventListener('click', () => {
+                const btnCancelarPreview = document.getElementById('btnCancelarCamera');
+                if (btnCancelarPreview) {
+                    btnCancelarPreview.click();
+                }
+                // Para o CameraPreview se estiver ativo
+                if (typeof CameraPreview !== 'undefined' && CameraPreview.stopCamera) {
+                    CameraPreview.stopCamera();
+                } else if (typeof window.CameraPreview !== 'undefined' && window.CameraPreview.stopCamera) {
+                    window.CameraPreview.stopCamera();
+                }
+                // Atualiza visibilidade dos botões do formulário
+                if (btnAbrirCameraCadastro) btnAbrirCameraCadastro.style.display = 'block';
+                if (btnTirarFotoCadastro) btnTirarFotoCadastro.style.display = 'none';
+                btnCancelarCadastro.style.display = 'none';
+                // Reseta a foto
+                resetPhotoCapture();
+            });
+        }
     }
     
     // Setup file input handler for test mode
@@ -131,7 +191,22 @@ const FormValidation = (() => {
                 form.reset();
                 form.classList.remove('was-validated');
                 
-                // Reload students list
+                // Para qualquer stream de câmera ativo no cadastro
+                const videoPreview = document.getElementById('videoPreviewCadastro');
+                if (videoPreview && videoPreview.srcObject) {
+                    const stream = videoPreview.srcObject;
+                    stream.getTracks().forEach(track => track.stop());
+                    videoPreview.srcObject = null;
+                }
+                
+                // Para o CameraPreview se estiver ativo
+                if (typeof CameraPreview !== 'undefined' && CameraPreview.stopCamera) {
+                    CameraPreview.stopCamera();
+                } else if (typeof window.CameraPreview !== 'undefined' && window.CameraPreview.stopCamera) {
+                    window.CameraPreview.stopCamera();
+                }
+                
+                // Reload students list e câmeras
                 await carregarDadosIniciais();
                 
                 // Reset photo capture
@@ -185,6 +260,13 @@ const FormValidation = (() => {
         const placeholder = document.getElementById('cameraPlaceholder');
         const fileInput = document.getElementById('fileInputCadastro');
         
+        // Para qualquer stream de câmera ativo
+        if (videoElement && videoElement.srcObject) {
+            const stream = videoElement.srcObject;
+            stream.getTracks().forEach(track => track.stop());
+            videoElement.srcObject = null;
+        }
+        
         if (photoElement) photoElement.style.display = 'none';
         if (videoElement) videoElement.style.display = 'none';
         if (placeholder) placeholder.style.display = 'flex';
@@ -193,10 +275,12 @@ const FormValidation = (() => {
         // Reset buttons
         const btnAbrir = document.getElementById('btnAbrirCameraCadastro');
         const btnTirar = document.getElementById('btnTirarFotoCadastro');
+        const btnCancelar = document.getElementById('btnCancelarCadastro');
         const btnRegistrar = document.getElementById('btnRegistrar');
         
         if (btnAbrir) btnAbrir.style.display = 'block';
         if (btnTirar) btnTirar.style.display = 'none';
+        if (btnCancelar) btnCancelar.style.display = 'none';
         if (btnRegistrar) btnRegistrar.disabled = true;
     }
     
